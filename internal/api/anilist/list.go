@@ -3,6 +3,7 @@ package anilist
 import (
 	"fmt"
 	"seanime/internal/hook"
+	"sort"
 
 	"github.com/goccy/go-json"
 	"github.com/rs/zerolog"
@@ -150,17 +151,79 @@ func ListAnimeM(
 ) (*ListAnime, error) {
 
 	variables := map[string]interface{}{}
-	if Page != nil {
-		variables["page"] = *Page
+
+	var jikan *jikanSearchResult
+	if Search != nil && *Search != "" {
+		jikanPage := 1
+		if Page != nil && *Page > 0 {
+			jikanPage = *Page
+		}
+		js, jerr := jikanSearchAnime(*Search, jikanPage, logger)
+		switch {
+		case jerr != nil:
+			if logger != nil {
+				logger.Warn().Err(jerr).Msg("anilist: jikan fallback failed; falling back to (broken) anilist search")
+			}
+		case len(js.MALIDs) == 0:
+			zeroBool := false
+			pageNum := 1
+			if Page != nil {
+				pageNum = *Page
+			}
+			perPageNum := 0
+			if PerPage != nil {
+				perPageNum = *PerPage
+			}
+			zero := 0
+			one := 1
+			return &ListAnime{
+				Page: &ListAnime_Page{
+					Media: []*BaseAnime{},
+					PageInfo: &ListAnime_Page_PageInfo{
+						HasNextPage: &zeroBool,
+						Total:       &zero,
+						PerPage:     &perPageNum,
+						CurrentPage: &pageNum,
+						LastPage:    &one,
+					},
+				},
+			}, nil
+		default:
+			jikan = js
+		}
 	}
-	if Search != nil {
-		variables["search"] = *Search
+
+	if jikan != nil {
+		variables["idMal_in"] = jikan.MALIDs
+		variables["page"] = 1
+		variables["perPage"] = len(jikan.MALIDs)
+	} else {
+		if Page != nil {
+			variables["page"] = *Page
+		}
+		if Search != nil {
+			variables["search"] = *Search
+		}
+		if PerPage != nil {
+			variables["perPage"] = *PerPage
+		}
 	}
-	if PerPage != nil {
-		variables["perPage"] = *PerPage
-	}
+
 	if Sort != nil {
-		variables["sort"] = Sort
+		if jikan != nil {
+			filtered := make([]*MediaSort, 0, len(Sort))
+			for _, s := range Sort {
+				if s == nil || *s == MediaSortSearchMatch {
+					continue
+				}
+				filtered = append(filtered, s)
+			}
+			if len(filtered) > 0 {
+				variables["sort"] = filtered
+			}
+		} else {
+			variables["sort"] = Sort
+		}
 	}
 	if Status != nil {
 		variables["status"] = Status
@@ -189,8 +252,14 @@ func ListAnimeM(
 	if CountryOfOrigin != nil {
 		variables["countryOfOrigin"] = *CountryOfOrigin
 	}
+
+	query := ListAnimeDocument
+	if jikan != nil {
+		query = listAnimeByMalIdsDocument
+	}
+
 	requestBody, err := json.Marshal(map[string]interface{}{
-		"query":     ListAnimeDocument,
+		"query":     query,
 		"variables": variables,
 	})
 	if err != nil {
@@ -209,6 +278,56 @@ func ListAnimeM(
 	}
 	if err := json.Unmarshal(m, &listMediaF); err != nil {
 		return nil, err
+	}
+
+	if jikan != nil && listMediaF.Page != nil {
+		if len(listMediaF.Page.Media) > 1 {
+			rank := make(map[int]int, len(jikan.MALIDs))
+			for i, id := range jikan.MALIDs {
+				rank[id] = i
+			}
+			sort.SliceStable(listMediaF.Page.Media, func(i, j int) bool {
+				mi, mj := listMediaF.Page.Media[i], listMediaF.Page.Media[j]
+				if mi == nil || mi.IDMal == nil {
+					return false
+				}
+				if mj == nil || mj.IDMal == nil {
+					return true
+				}
+				ri, oki := rank[*mi.IDMal]
+				rj, okj := rank[*mj.IDMal]
+				if !oki {
+					ri = len(jikan.MALIDs)
+				}
+				if !okj {
+					rj = len(jikan.MALIDs)
+				}
+				return ri < rj
+			})
+		}
+
+		if listMediaF.Page.PageInfo == nil {
+			listMediaF.Page.PageInfo = &ListAnime_Page_PageInfo{}
+		}
+		hasNext := jikan.HasNextPage
+		currentPage := jikan.CurrentPage
+		if currentPage == 0 && Page != nil {
+			currentPage = *Page
+		}
+		lastPage := jikan.LastPage
+		if lastPage == 0 {
+			lastPage = currentPage
+		}
+		total := jikan.Total
+		perPage := len(jikan.MALIDs)
+		if PerPage != nil && *PerPage > perPage {
+			perPage = *PerPage
+		}
+		listMediaF.Page.PageInfo.HasNextPage = &hasNext
+		listMediaF.Page.PageInfo.CurrentPage = &currentPage
+		listMediaF.Page.PageInfo.LastPage = &lastPage
+		listMediaF.Page.PageInfo.Total = &total
+		listMediaF.Page.PageInfo.PerPage = &perPage
 	}
 
 	return &listMediaF, nil
