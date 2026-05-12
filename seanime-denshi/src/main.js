@@ -22,6 +22,8 @@ const DENSHI_SETTINGS_DEFAULTS = {
     updateChannel: "github",
     windowBounds: null,
     windowMaximized: true,
+    remoteServerEnabled: false,
+    remoteServerUrl: "",
 }
 
 const MAIN_WINDOW_DEFAULT_BOUNDS = {
@@ -217,6 +219,25 @@ function setupChromiumFlags() {
     app.commandLine.appendSwitch("enable-gpu-rasterization")
     app.commandLine.appendSwitch("enable-oop-rasterization")
 
+    // Treat the configured remote-server URL as a secure origin. WebGPU
+    // (and other powerful APIs) require a secure context; without this the
+    // renderer hides navigator.gpu and Anime4K reports "not supported".
+    const remoteOrigin = (() => {
+        try {
+            const raw = (denshiSettings && denshiSettings.remoteServerUrl) || ""
+            if (!raw) return ""
+            const parsed = new URL(raw)
+            if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return ""
+            return `${parsed.protocol}//${parsed.host}`
+        } catch {
+            return ""
+        }
+    })()
+    if (remoteOrigin) {
+        app.commandLine.appendSwitch("unsafely-treat-insecure-origin-as-secure", remoteOrigin)
+        log.info(`[Denshi] Marked ${remoteOrigin} as secure for WebGPU access`)
+    }
+
     // Background processing optimizations
     app.commandLine.appendSwitch("disable-background-timer-throttling")
     app.commandLine.appendSwitch("disable-backgrounding-occluded-windows")
@@ -253,15 +274,35 @@ function isAllowedLocalEmbedURL(rawURL) {
         return false
     }
 
+    let parsed
     try {
-        const parsed = new URL(rawURL)
-        return parsed.protocol === "http:"
-            && parsed.hostname === LOCAL_EMBED_HOST
-            && parsed.port === String(localServerPort)
-            && parsed.pathname.startsWith("/player/")
+        parsed = new URL(rawURL)
     } catch {
         return false
     }
+
+    if (!parsed.pathname.startsWith("/player/")) {
+        return false
+    }
+
+    const isLocalHttp = parsed.protocol === "http:"
+        && parsed.hostname === LOCAL_EMBED_HOST
+        && parsed.port === String(localServerPort)
+    if (isLocalHttp) {
+        return true
+    }
+
+    if (isRemoteServerActive()) {
+        try {
+            const remote = new URL(getActiveServerBaseUrl())
+            return parsed.protocol === remote.protocol
+                && parsed.hostname === remote.hostname
+                && parsed.port === remote.port
+        } catch {
+            return false
+        }
+    }
+    return false
 }
 
 function normalizeUpdateFeedURL(candidate, fallbackURL) {
@@ -295,12 +336,45 @@ function getDesktopServerBaseUrl() {
     return `http://${DESKTOP_SERVER_HOST}:${getDesktopServerPort()}`
 }
 
+function normalizeRemoteServerUrl(raw) {
+    if (typeof raw !== "string") {
+        return ""
+    }
+    const trimmed = raw.trim().replace(/\/+$/, "")
+    if (!trimmed) {
+        return ""
+    }
+    try {
+        const parsed = new URL(trimmed)
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+            return ""
+        }
+        if (!parsed.hostname) {
+            return ""
+        }
+        return `${parsed.protocol}//${parsed.host}`
+    } catch {
+        return ""
+    }
+}
+
+function isRemoteServerActive() {
+    return !!denshiSettings.remoteServerEnabled && !!normalizeRemoteServerUrl(denshiSettings.remoteServerUrl)
+}
+
+function getActiveServerBaseUrl() {
+    if (isRemoteServerActive()) {
+        return normalizeRemoteServerUrl(denshiSettings.remoteServerUrl)
+    }
+    return getDesktopServerBaseUrl()
+}
+
 async function isDesktopServerReachable() {
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 1000)
+    const timeoutId = setTimeout(() => controller.abort(), 1500)
 
     try {
-        const response = await net.fetch(`${getDesktopServerBaseUrl()}/api/v1/status`, {
+        const response = await net.fetch(`${getActiveServerBaseUrl()}/api/v1/status`, {
             signal: controller.signal,
         })
         return response.ok
@@ -400,7 +474,12 @@ function setupCustomProtocol() {
 }
 
 // call before app.whenReady
+// Load settings early so setupChromiumFlags can read remoteServerUrl and
+// mark it as a secure origin (required for WebGPU / Anime4K on a remote
+// HTTP server).
+denshiSettings = loadDenshiSettings()
 setupCustomProtocol()
+setupChromiumFlags()
 
 // Sets up the app protocol to serve the static files
 function setupAppProtocol() {
@@ -565,6 +644,38 @@ function logEnvironmentInfo() {
 }
 
 let mainWindow = null
+let serverSettingsWindow = null
+
+function showServerSettingsWindow() {
+    if (serverSettingsWindow && !serverSettingsWindow.isDestroyed()) {
+        serverSettingsWindow.focus()
+        return
+    }
+    serverSettingsWindow = new BrowserWindow({
+        width: 520,
+        height: 360,
+        resizable: false,
+        minimizable: false,
+        maximizable: false,
+        fullscreenable: false,
+        title: "Server Settings",
+        parent: mainWindow && !mainWindow.isDestroyed() ? mainWindow : null,
+        modal: !!(mainWindow && !mainWindow.isDestroyed()),
+        backgroundColor: "#0c0c0c",
+        autoHideMenuBar: true,
+        webPreferences: {
+            preload: path.join(__dirname, "server-settings-preload.js"),
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+        },
+    })
+    serverSettingsWindow.setMenuBarVisibility(false)
+    serverSettingsWindow.loadFile(path.join(__dirname, "server-settings.html"))
+    serverSettingsWindow.on("closed", () => {
+        serverSettingsWindow = null
+    })
+}
 let splashScreen = null
 let crashScreen = null
 let tray = null
@@ -676,6 +787,10 @@ function createTray() {
                 showMainWindow()
             }
         }
+    }, {
+        id: "server_settings", label: "Server Settings…", click: () => {
+            showServerSettingsWindow()
+        }
     }, ...(process.platform === "darwin" ? [{
         id: "accessory_mode", label: "Remove from Dock", click: () => {
             app.dock.hide()
@@ -732,7 +847,10 @@ async function launchSeanimeServer(isRestart) {
                 return
             }
 
-            if (!mainWindowStartupReady) {
+            // In remote-server mode the served seanime-web is a stock browser
+            // build that does not call window.electron.startup.ready(), so
+            // mainWindowStartupReady will never flip. Don't gate on it.
+            if (!mainWindowStartupReady && !isRemoteServerActive()) {
                 if (!waitingForRenderer) {
                     waitingForRenderer = true
                     logStartupEvent("WAITING FOR RENDERER", source)
@@ -775,7 +893,10 @@ async function launchSeanimeServer(isRestart) {
         }
 
         async function probeServerStartup() {
-            if (startupResolved || !serverProcess || serverProcess.killed) {
+            if (startupResolved) {
+                return
+            }
+            if (!isRemoteServerActive() && (!serverProcess || serverProcess.killed)) {
                 return
             }
 
@@ -798,6 +919,17 @@ async function launchSeanimeServer(isRestart) {
                 showMainWindow()
             }
             return resolve()
+        }
+
+        if (isRemoteServerActive()) {
+            const remoteBase = getActiveServerBaseUrl()
+            logStartupEvent("Remote server mode", remoteBase)
+            console.log(`[Main] Remote server mode enabled -> ${remoteBase}`)
+            startupPollInterval = setInterval(() => {
+                void probeServerStartup()
+            }, 500)
+            void probeServerStartup()
+            return
         }
 
         // Determine the correct binary to use based on platform and architecture
@@ -1047,13 +1179,18 @@ function createMainWindow() {
     //     showInspectElement: true
     // });
 
-    // Set title bar style based on platform
-    if (process.platform === "darwin") {
-        windowOptions.titleBarStyle = "hiddenInset"
-    }
+    // Set title bar style based on platform. In remote-server mode the
+    // served seanime-web is a stock browser build that does not render the
+    // custom Electron title bar, so keep the native one to preserve the
+    // minimize/maximize/close buttons.
+    if (!isRemoteServerActive()) {
+        if (process.platform === "darwin") {
+            windowOptions.titleBarStyle = "hiddenInset"
+        }
 
-    if (process.platform === "win32") {
-        windowOptions.titleBarStyle = "hidden"
+        if (process.platform === "win32") {
+            windowOptions.titleBarStyle = "hidden"
+        }
     }
 
     mainWindow = new BrowserWindow(windowOptions)
@@ -1133,6 +1270,10 @@ function createMainWindow() {
         logStartupEvent("Loading from dev server", "http://127.0.0.1:43210")
         mainWindow.loadURL("http://127.0.0.1:43210")
         // mainWindow.loadURL('chrome://gpu');
+    } else if (isRemoteServerActive()) {
+        const remoteBase = getActiveServerBaseUrl()
+        logStartupEvent("Loading remote server UI", remoteBase)
+        mainWindow.loadURL(`${remoteBase}/`)
     } else {
         logStartupEvent("Loading production build with custom protocol")
         mainWindow.loadURL("app://-")
@@ -1320,8 +1461,8 @@ app.whenReady().then(async () => {
         })
     }
 
-    // Set up Chromium flags for better video playback
-    setupChromiumFlags()
+    // setupChromiumFlags() is now called at module load, before whenReady,
+    // because Electron requires Chromium flags to be set before app init.
 
     // Log environment information
     logEnvironmentInfo()
@@ -1387,6 +1528,41 @@ app.whenReady().then(async () => {
 
     // Create tray
     createTray()
+
+    // Register server-settings IPC handlers BEFORE awaiting server launch.
+    // The tray menu (above) can open the settings dialog immediately, and the
+    // dialog must be usable even if the remote server is unreachable and the
+    // launchSeanimeServer await below never resolves.
+    ipcMain.handle("server-settings:get", () => ({
+        remoteServerEnabled: !!denshiSettings.remoteServerEnabled,
+        remoteServerUrl: denshiSettings.remoteServerUrl || "",
+    }))
+
+    ipcMain.handle("server-settings:save", (_, payload) => {
+        const enabled = !!(payload && payload.remoteServerEnabled)
+        const rawUrl = payload && typeof payload.remoteServerUrl === "string" ? payload.remoteServerUrl.trim() : ""
+        denshiSettings = {
+            ...denshiSettings,
+            remoteServerEnabled: enabled,
+            remoteServerUrl: rawUrl,
+        }
+        saveDenshiSettings(denshiSettings)
+        log.info(`[Denshi] Remote server settings updated: enabled=${enabled} url=${rawUrl}`)
+        return { ok: true }
+    })
+
+    ipcMain.handle("server-settings:relaunch", () => {
+        log.info("[Denshi] Relaunching to apply server settings")
+        app.relaunch()
+        app.exit(0)
+    })
+
+    ipcMain.handle("server-settings:close", (event) => {
+        const win = BrowserWindow.fromWebContents(event.sender)
+        if (win && !win.isDestroyed()) {
+            win.close()
+        }
+    })
 
     // Launch server
     try {

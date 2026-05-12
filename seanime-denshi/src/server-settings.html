@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Server Settings</title>
+<style>
+  :root {
+    color-scheme: dark;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: #0c0c0c; color: #e6e6e6;
+    height: 100%;
+  }
+  body { padding: 22px 24px; box-sizing: border-box; }
+  h1 { font-size: 16px; margin: 0 0 4px 0; }
+  p.lede { margin: 0 0 18px 0; color: #9a9a9a; font-size: 12px; line-height: 1.5; }
+  label.row { display: flex; align-items: center; gap: 10px; margin: 14px 0; }
+  label.row input[type="checkbox"] { width: 16px; height: 16px; accent-color: #6366f1; }
+  label.field { display: block; margin: 14px 0 6px 0; color: #b5b5b5; font-size: 12px; }
+  input[type="text"] {
+    width: 100%; box-sizing: border-box;
+    padding: 8px 10px; font-size: 13px;
+    background: #1a1a1a; color: #e6e6e6;
+    border: 1px solid #2c2c2c; border-radius: 6px;
+    outline: none;
+    font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+  }
+  input[type="text"]:focus { border-color: #6366f1; }
+  input[type="text"]:disabled { opacity: 0.5; }
+  .footer {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 22px;
+  }
+  .hint { color: #6e6e6e; font-size: 11px; }
+  .actions { display: flex; gap: 8px; }
+  button {
+    background: #1a1a1a; color: #e6e6e6;
+    border: 1px solid #2c2c2c; border-radius: 6px;
+    padding: 7px 14px; font-size: 12px;
+    cursor: pointer;
+  }
+  button.primary { background: #6366f1; border-color: #6366f1; color: white; }
+  button:hover { filter: brightness(1.15); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .status { font-size: 11px; margin-top: 6px; min-height: 14px; }
+  .status.ok { color: #22c55e; }
+  .status.err { color: #f87171; }
+</style>
+</head>
+<body>
+
+<h1>Remote Server</h1>
+<p class="lede">
+  Connect Seanime Denshi to a remote Seanime server (for example, one running in Docker on
+  your home server) instead of starting a local one. Requires a restart to apply.
+</p>
+
+<label class="row">
+  <input type="checkbox" id="enabled" />
+  <span>Use remote server</span>
+</label>
+
+<label class="field" for="url">Server URL</label>
+<input type="text" id="url" placeholder="http://192.168.1.245:43211" autocomplete="off" spellcheck="false" />
+<div class="status" id="status"></div>
+
+<div class="footer">
+  <span class="hint">Leave disabled to use the bundled local server.</span>
+  <div class="actions">
+    <button id="cancel">Cancel</button>
+    <button id="save" class="primary">Save &amp; Restart</button>
+  </div>
+</div>
+
+<script>
+  const $enabled = document.getElementById("enabled")
+  const $url = document.getElementById("url")
+  const $status = document.getElementById("status")
+  const $save = document.getElementById("save")
+  const $cancel = document.getElementById("cancel")
+
+  function syncDisabled() {
+    $url.disabled = !$enabled.checked
+  }
+
+  function setStatus(msg, kind) {
+    $status.textContent = msg || ""
+    $status.className = "status" + (kind ? " " + kind : "")
+  }
+
+  function isValidUrl(raw) {
+    try {
+      const u = new URL((raw || "").trim())
+      return (u.protocol === "http:" || u.protocol === "https:") && !!u.hostname
+    } catch {
+      return false
+    }
+  }
+
+  async function load() {
+    const data = await window.serverSettings.get()
+    $enabled.checked = !!data.remoteServerEnabled
+    $url.value = data.remoteServerUrl || ""
+    syncDisabled()
+  }
+
+  $enabled.addEventListener("change", () => {
+    syncDisabled()
+    setStatus("")
+  })
+
+  $cancel.addEventListener("click", () => {
+    window.serverSettings.close()
+  })
+
+  $save.addEventListener("click", async () => {
+    const enabled = $enabled.checked
+    const url = $url.value.trim()
+    if (enabled && !isValidUrl(url)) {
+      setStatus("Enter a valid URL like http://192.168.1.245:43211", "err")
+      return
+    }
+    $save.disabled = true
+    setStatus("Saving…")
+    try {
+      await window.serverSettings.save({ remoteServerEnabled: enabled, remoteServerUrl: url })
+      setStatus("Saved. Restarting…", "ok")
+      setTimeout(() => window.serverSettings.relaunch(), 250)
+    } catch (e) {
+      setStatus("Save failed: " + (e?.message || e), "err")
+      $save.disabled = false
+    }
+  })
+
+  load()
+</script>
+
+</body>
+</html>
