@@ -335,15 +335,16 @@ func (s *Session) getAudioPipeline(idx int32) *Pipeline {
 
 // probeAudioStreamTail returns (last packet PTS in seconds, sample rate Hz)
 // for the given audio stream. Either may be 0 if not determinable; callers
-// must treat 0 as "no padding". Uses ffprobe's -sseof to scan only the tail
-// of the file so it stays fast on long episodes.
+// must treat 0 as "no padding". Reads packet headers for the full audio
+// stream — typically ~1-2 seconds on a 24-minute file since only headers
+// are touched, not decoded samples.
 func probeAudioStreamTail(ffprobePath, path string, audioIdx int32, logger *zerolog.Logger) (lastPts float64, sampleRate int) {
 	bin := ffprobePath
 	if bin == "" {
 		bin = "ffprobe"
 	}
 
-	// Sample rate via stream info (cheap, full-file probe but only headers).
+	// Sample rate via stream info (cheap, headers only).
 	srCmd := util.NewCmd(bin,
 		"-v", "error",
 		"-select_streams", fmt.Sprintf("a:%d", audioIdx),
@@ -358,16 +359,17 @@ func probeAudioStreamTail(ffprobePath, path string, audioIdx int32, logger *zero
 		}
 	}
 
-	// Last packet PTS via tail-only probe.
-	tailCmd := util.NewCmd(bin,
+	// Last packet PTS — read full audio stream packet headers and keep the
+	// last value. The bundled jellyfin-ffmpeg's ffprobe does not accept
+	// -sseof, so we can't tail-only this; the full pass is still fast.
+	cmd := util.NewCmd(bin,
 		"-v", "error",
-		"-sseof", "-120",
 		"-select_streams", fmt.Sprintf("a:%d", audioIdx),
 		"-show_entries", "packet=pts_time",
 		"-of", "csv=p=0",
 		path,
 	)
-	out, err := tailCmd.Output()
+	out, err := cmd.Output()
 	if err != nil {
 		logger.Debug().Err(err).Int32("audio", audioIdx).
 			Msg("cassette: audio tail probe failed (proceeding without padding)")
