@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"seanime/internal/mediastream/videofile"
+	"seanime/internal/util"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/rs/zerolog"
@@ -294,18 +297,96 @@ func (s *Session) getAudioPipeline(idx int32) *Pipeline {
 		return filepath.Join(s.Out, fmt.Sprintf("segment-a%d-%d-%%d.ts", idx, eid))
 	}
 
+	// Probe the audio stream's last packet PTS and sample rate. When the
+	// source audio ends before the video does (common in dual-audio fansub
+	// releases where the dub track is truncated mid-episode), runHead will
+	// substitute silence past this timestamp instead of looping ffmpeg
+	// over a range that has no audio data to produce.
+	audioLastPts, srcSampleRate := probeAudioStreamTail(s.settings.FfprobePath, s.Path, idx, s.logger)
+	if audioLastPts > 0 && audioLastPts+1.0 < float64(s.Info.Duration) {
+		s.logger.Info().
+			Int32("audio", idx).
+			Float64("audioLastPts", audioLastPts).
+			Float64("videoDuration", float64(s.Info.Duration)).
+			Msg("cassette: audio stream ends before video, silent padding will be used")
+	} else {
+		// Track is essentially full-length; disable padding so we never
+		// risk substituting silence over real audio.
+		audioLastPts = 0
+	}
+
 	p := NewPipeline(PipelineConfig{
-		Kind:       AudioKind,
-		Label:      fmt.Sprintf("audio %d", idx),
-		Session:    s,
-		Settings:   s.settings,
-		Governor:   s.governor,
-		Logger:     s.logger,
-		BuildArgs:  buildArgs,
-		OutPathFmt: outFmt,
+		Kind:               AudioKind,
+		Label:              fmt.Sprintf("audio %d", idx),
+		Session:            s,
+		Settings:           s.settings,
+		Governor:           s.governor,
+		Logger:             s.logger,
+		BuildArgs:          buildArgs,
+		OutPathFmt:         outFmt,
+		AudioLastPts:       audioLastPts,
+		AudioOutputChans:   decision.Channels,
+		AudioOutputBitrate: decision.Bitrate,
+		AudioOutputRate:    srcSampleRate,
 	})
 	s.audios[idx] = p
 	return p
+}
+
+// probeAudioStreamTail returns (last packet PTS in seconds, sample rate Hz)
+// for the given audio stream. Either may be 0 if not determinable; callers
+// must treat 0 as "no padding". Uses ffprobe's -sseof to scan only the tail
+// of the file so it stays fast on long episodes.
+func probeAudioStreamTail(ffprobePath, path string, audioIdx int32, logger *zerolog.Logger) (lastPts float64, sampleRate int) {
+	bin := ffprobePath
+	if bin == "" {
+		bin = "ffprobe"
+	}
+
+	// Sample rate via stream info (cheap, full-file probe but only headers).
+	srCmd := util.NewCmd(bin,
+		"-v", "error",
+		"-select_streams", fmt.Sprintf("a:%d", audioIdx),
+		"-show_entries", "stream=sample_rate",
+		"-of", "csv=p=0",
+		path,
+	)
+	if out, err := srCmd.Output(); err == nil {
+		line := strings.TrimSpace(string(out))
+		if v, perr := strconv.Atoi(line); perr == nil {
+			sampleRate = v
+		}
+	}
+
+	// Last packet PTS via tail-only probe.
+	tailCmd := util.NewCmd(bin,
+		"-v", "error",
+		"-sseof", "-120",
+		"-select_streams", fmt.Sprintf("a:%d", audioIdx),
+		"-show_entries", "packet=pts_time",
+		"-of", "csv=p=0",
+		path,
+	)
+	out, err := tailCmd.Output()
+	if err != nil {
+		logger.Debug().Err(err).Int32("audio", audioIdx).
+			Msg("cassette: audio tail probe failed (proceeding without padding)")
+		return 0, sampleRate
+	}
+
+	// Find the last parseable pts_time line.
+	lines := strings.Split(string(out), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		line = strings.TrimRight(line, ",")
+		if line == "" {
+			continue
+		}
+		if v, perr := strconv.ParseFloat(line, 64); perr == nil {
+			return v, sampleRate
+		}
+	}
+	return 0, sampleRate
 }
 
 // lifecycle

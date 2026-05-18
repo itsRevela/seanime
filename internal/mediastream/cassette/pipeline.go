@@ -75,6 +75,15 @@ type Pipeline struct {
 
 	// outPathFmt returns the output path pattern for a given encoder ID.
 	outPathFmt func(encoderID int) string
+
+	// Audio-only fields used to substitute silent audio when the source
+	// audio stream ends before the video does (a defect in some releases).
+	// audioLastPts is the timestamp (in seconds) of the last audio packet
+	// in the source stream; 0 disables the silence-padding behaviour.
+	audioLastPts       float64
+	audioOutputChans   string
+	audioOutputBitrate string
+	audioOutputRate    int
 }
 
 // PipelineConfig configures a new pipeline
@@ -87,6 +96,16 @@ type PipelineConfig struct {
 	Logger     *zerolog.Logger
 	BuildArgs  func(segmentTimes string) []string
 	OutPathFmt func(encoderID int) string
+
+	// Audio-only. Optional. When AudioLastPts > 0, any runHead range whose
+	// segments fall past this timestamp will be encoded from a silent
+	// lavfi source instead of the real input, with the codec/channels/rate
+	// below. Used to keep playback advancing through credits/outros when
+	// the source audio stream ends early.
+	AudioLastPts       float64
+	AudioOutputChans   string
+	AudioOutputBitrate string
+	AudioOutputRate    int
 }
 
 // NewPipeline creates a pipeline and initializes its segment table
@@ -97,20 +116,24 @@ func NewPipeline(cfg PipelineConfig) *Pipeline {
 	segments := NewSegmentTable(length)
 
 	p := &Pipeline{
-		kind:       cfg.Kind,
-		label:      cfg.Label,
-		session:    cfg.Session,
-		segments:   segments,
-		velocity:   NewVelocityEstimator(30 * time.Second),
-		heads:      make([]head, 0, 4),
-		killCh:     make(chan struct{}),
-		settings:   cfg.Settings,
-		governor:   cfg.Governor,
-		logger:     cfg.Logger,
-		ctx:        ctx,
-		cancel:     cancel,
-		buildArgs:  cfg.BuildArgs,
-		outPathFmt: cfg.OutPathFmt,
+		kind:               cfg.Kind,
+		label:              cfg.Label,
+		session:            cfg.Session,
+		segments:           segments,
+		velocity:           NewVelocityEstimator(30 * time.Second),
+		heads:              make([]head, 0, 4),
+		killCh:             make(chan struct{}),
+		settings:           cfg.Settings,
+		governor:           cfg.Governor,
+		logger:             cfg.Logger,
+		ctx:                ctx,
+		cancel:             cancel,
+		buildArgs:          cfg.BuildArgs,
+		outPathFmt:         cfg.OutPathFmt,
+		audioLastPts:       cfg.AudioLastPts,
+		audioOutputChans:   cfg.AudioOutputChans,
+		audioOutputBitrate: cfg.AudioOutputBitrate,
+		audioOutputRate:    cfg.AudioOutputRate,
 	}
 
 	if !isDone {
@@ -334,8 +357,33 @@ func (p *Pipeline) prefetch(current int32) {
 	}
 }
 
+// firstSegmentAtOrAfter returns the smallest segment index whose keyframe
+// timestamp is >= t. Returns the total length when nothing qualifies.
+func (p *Pipeline) firstSegmentAtOrAfter(t float64) int32 {
+	length, _ := p.session.Keyframes.Length()
+	// Binary search; Keyframes is monotonically increasing.
+	lo, hi := int32(0), length
+	for lo < hi {
+		mid := (lo + hi) / 2
+		if p.session.Keyframes.Get(mid) >= t {
+			hi = mid
+		} else {
+			lo = mid + 1
+		}
+	}
+	return lo
+}
+
 // runHead launches an ffmpeg process from [start, end).
 // it acquires a slot from the governor.
+//
+// For audio pipelines whose source audio stream ends before the video does
+// (audioLastPts > 0), the requested range is split: segments whose keyframe
+// time is before audioLastPts are encoded normally from the source, while
+// segments past that boundary are encoded from a silent lavfi source.
+// Both branches share the same head/segment lifecycle; the silent branch
+// runs in its own goroutine so the foreground request returns as soon as
+// the real head is spawned.
 func (p *Pipeline) runHead(start int32) error {
 	length, isDone := p.session.Keyframes.Length()
 	end := min(start+100, length)
@@ -355,6 +403,37 @@ func (p *Pipeline) runHead(start int32) error {
 	if start >= end {
 		return nil
 	}
+
+	// Audio EOF handling: if (part of) this range is past the source audio's
+	// last sample, route those segments through the silent-encode path
+	// instead of having ffmpeg seek past audio EOF and produce nothing.
+	if p.kind == AudioKind && p.audioLastPts > 0 {
+		cutoff := p.firstSegmentAtOrAfter(p.audioLastPts)
+		if cutoff <= start {
+			// Entire range is past audio EOF.
+			return p.runHeadCore(start, end, true)
+		}
+		if cutoff < end {
+			silentStart, silentEnd := cutoff, end
+			end = cutoff
+			go func() {
+				if err := p.runHeadCore(silentStart, silentEnd, true); err != nil {
+					p.logger.Warn().Err(err).
+						Int32("start", silentStart).Int32("end", silentEnd).
+						Msg("cassette: silent audio padding failed")
+				}
+			}()
+		}
+	}
+
+	return p.runHeadCore(start, end, false)
+}
+
+// runHeadCore is the underlying encoder lifecycle. When silent is true the
+// input is replaced with a lavfi anullsrc generator that produces silence;
+// the segment muxer otherwise behaves identically.
+func (p *Pipeline) runHeadCore(start, end int32, silent bool) error {
+	length, _ := p.session.Keyframes.Length()
 
 	// acquire a slot from the governor
 	release, err := p.governor.Acquire(p.ctx)
@@ -420,42 +499,107 @@ func (p *Pipeline) runHead(start int32) error {
 	}
 
 	args := []string{"-nostats", "-hide_banner", "-loglevel", "warning"}
-	args = append(args, p.settings.HwAccel.DecodeFlags...)
 
-	if startRef != 0 {
-		if p.kind == VideoKind {
-			// -noaccurate_seek gives faster seeks for video and is required
-			// for correct segment boundary behaviour in transmux mode
-			args = append(args, "-noaccurate_seek")
+	var relTimes []float64
+	var segmentStartNumber int32
+
+	if silent {
+		// Silent placeholder mode: substitute lavfi anullsrc for the file
+		// input. The segment muxer below still cuts at the same keyframe
+		// boundaries as a real encode, so the produced .ts files are
+		// drop-in replacements for the real audio segments — they just
+		// carry silence. Used when the source audio stream ends before
+		// the video does (a defect in some releases).
+		rate := p.audioOutputRate
+		if rate <= 0 {
+			rate = 48000
 		}
-		args = append(args, "-ss", fmt.Sprintf("%.6f", startRef))
+		chans := p.audioOutputChans
+		if chans == "" {
+			chans = "2"
+		}
+		bitrate := p.audioOutputBitrate
+		if bitrate == "" {
+			bitrate = "128k"
+		}
+
+		// Total duration this silent run must cover (start of segment `start`
+		// to end of segment `end-1`). Fall back to session duration when end
+		// is past the last keyframe.
+		endTime := float64(p.session.Info.Duration)
+		if end < length {
+			endTime = p.session.Keyframes.Get(end)
+		}
+		silentDuration := endTime - p.session.Keyframes.Get(start)
+		if silentDuration <= 0 {
+			// Nothing to do.
+			release()
+			p.headsMu.Lock()
+			p.heads[encoderID] = deletedHead
+			p.headsMu.Unlock()
+			headCancel()
+			return nil
+		}
+
+		args = append(args,
+			"-f", "lavfi",
+			"-i", fmt.Sprintf("anullsrc=r=%d:cl=stereo", rate),
+			"-t", fmt.Sprintf("%.6f", silentDuration),
+			"-c:a", "aac",
+			"-ac", chans,
+			"-b:a", bitrate,
+		)
+
+		// segment_times are relative to t=0 of the lavfi source (which is
+		// also t=0 of segment `start`). No pre-segment is produced.
+		rawTimes := p.session.Keyframes.Slice(start+1, end+endPad)
+		baseTime := p.session.Keyframes.Get(start)
+		relTimes = lo.Map(rawTimes, func(t float64, _ int) float64 {
+			return t - baseTime
+		})
+		if len(relTimes) == 0 {
+			relTimes = []float64{9_999_999}
+		}
+		segmentStartNumber = start
+	} else {
+		args = append(args, p.settings.HwAccel.DecodeFlags...)
+
+		if startRef != 0 {
+			if p.kind == VideoKind {
+				// -noaccurate_seek gives faster seeks for video and is required
+				// for correct segment boundary behaviour in transmux mode
+				args = append(args, "-noaccurate_seek")
+			}
+			args = append(args, "-ss", fmt.Sprintf("%.6f", startRef))
+		}
+
+		if end+1 < length {
+			endRef := p.session.Keyframes.Get(end + 1)
+			// compensate for the offset between the requested -ss and the actual
+			// keyframe that ffmpeg landed on
+			endRef += startRef - p.session.Keyframes.Get(startSeg)
+			args = append(args, "-to", fmt.Sprintf("%.6f", endRef))
+		}
+
+		args = append(args,
+			"-sn", "-dn",
+			"-i", p.session.Path,
+			"-map_metadata", "-1",
+			"-map_chapters", "-1",
+			"-start_at_zero",
+			"-copyts",
+			"-muxdelay", "0",
+		)
+
+		segStr := toSegmentStr(segmentTimes)
+		args = append(args, p.buildArgs(segStr)...)
+
+		// Compute segment_times relative to -ss start.
+		relTimes = lo.Map(segmentTimes, func(t float64, _ int) float64 {
+			return t - p.session.Keyframes.Get(startSeg)
+		})
+		segmentStartNumber = startSeg
 	}
-
-	if end+1 < length {
-		endRef := p.session.Keyframes.Get(end + 1)
-		// compensate for the offset between the requested -ss and the actual
-		// keyframe that ffmpeg landed on
-		endRef += startRef - p.session.Keyframes.Get(startSeg)
-		args = append(args, "-to", fmt.Sprintf("%.6f", endRef))
-	}
-
-	args = append(args,
-		"-sn", "-dn",
-		"-i", p.session.Path,
-		"-map_metadata", "-1", // ?
-		"-map_chapters", "-1", // ?
-		"-start_at_zero",
-		"-copyts",
-		"-muxdelay", "0",
-	)
-
-	segStr := toSegmentStr(segmentTimes)
-	args = append(args, p.buildArgs(segStr)...)
-
-	// Compute segment_times relative to -ss start.
-	relTimes := lo.Map(segmentTimes, func(t float64, _ int) float64 {
-		return t - p.session.Keyframes.Get(startSeg)
-	})
 
 	args = append(args,
 		"-f", "segment",
@@ -464,12 +608,12 @@ func (p *Pipeline) runHead(start int32) error {
 		"-segment_times", toSegmentStr(relTimes),
 		"-segment_list_type", "flat",
 		"-segment_list", "pipe:1",
-		"-segment_start_number", fmt.Sprint(startSeg),
+		"-segment_start_number", fmt.Sprint(segmentStartNumber),
 		outPath,
 	)
 
 	p.logger.Trace().Str("pipeline", p.label).Int("eid", encoderID).
-		Int32("start", start).Int32("end", end).
+		Int32("start", start).Int32("end", end).Bool("silent", silent).
 		Msgf("cassette: spawning ffmpeg")
 
 	cmd := util.NewCmdCtx(context.Background(), p.settings.FfmpegPath, args...)
