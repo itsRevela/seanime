@@ -160,31 +160,37 @@ function MediastreamPage() {
         log.info("Media container changed", mediaContainer)
 
         const codecSupported = isCodecSupported(mediaContainer?.mediaInfo?.mimeCodec ?? "")
-        log.info("Is codec supported?", codecSupported)
+        log.info("Is codec supported?", codecSupported, "forceStreamType:", mediaContainer.forceStreamType)
 
-        // switch to direct play if supported
-        if (mediaContainer.streamType === "transcode") {
-            if (!codecSupported && mediastreamSettings?.directPlayOnly) {
-                toast.warning("Codec not supported for direct play")
-                changeUrl(null)
-                return
+        // Skip the client-side auto-switch entirely when the server made an
+        // authoritative streamType choice (e.g. downgraded transcode→direct
+        // because the GPU can't decode this codec). canPlayType is unreliable
+        // for codecs the native player can handle but Chromium reports as "maybe".
+        if (!mediaContainer.forceStreamType) {
+            // switch to direct play if supported
+            if (mediaContainer.streamType === "transcode") {
+                if (!codecSupported && mediastreamSettings?.directPlayOnly) {
+                    toast.warning("Codec not supported for direct play")
+                    changeUrl(null)
+                    return
+                }
+
+                if (codecSupported && (!mediastreamSettings?.disableAutoSwitchToDirectPlay || mediastreamSettings?.directPlayOnly)) {
+                    log.info("Switching to direct play")
+                    setStreamType("direct")
+                    changeUrl(null)
+                    return
+                }
             }
 
-            if (codecSupported && (!mediastreamSettings?.disableAutoSwitchToDirectPlay || mediastreamSettings?.directPlayOnly)) {
-                log.info("Switching to direct play")
-                setStreamType("direct")
-                changeUrl(null)
-                return
-            }
-        }
-
-        // switch to transcode if direct play not supported
-        if (mediaContainer.streamType === "direct") {
-            if (!codecSupported) {
-                log.warning("Codec not supported for direct play, switching to transcode")
-                setStreamType("transcode")
-                changeUrl(null)
-                return
+            // switch to transcode if direct play not supported
+            if (mediaContainer.streamType === "direct") {
+                if (!codecSupported) {
+                    log.warning("Codec not supported for direct play, switching to transcode")
+                    setStreamType("transcode")
+                    changeUrl(null)
+                    return
+                }
             }
         }
 

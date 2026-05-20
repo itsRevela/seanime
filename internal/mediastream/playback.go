@@ -36,6 +36,13 @@ type (
 		StreamType StreamType           `json:"streamType"` // Tells the frontend how to play the media.
 		StreamUrl  string               `json:"streamUrl"`  // The relative endpoint to stream the media.
 		MediaInfo  *videofile.MediaInfo `json:"mediaInfo"`
+		// ForceStreamType signals that the server made an authoritative
+		// decision about StreamType (e.g. downgraded transcode→direct because
+		// the GPU can't decode the source codec) and the client should NOT
+		// auto-switch based on its own browser codec capability check. The
+		// browser's canPlayType is unreliable for codecs that the native /
+		// libmpv player can handle but Chromium reports as "maybe".
+		ForceStreamType bool `json:"forceStreamType,omitempty"`
 		//Metadata  *Metadata       `json:"metadata"`
 		// todo: add more fields (e.g. metadata)
 	}

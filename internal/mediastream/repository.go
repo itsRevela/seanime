@@ -160,6 +160,19 @@ func (r *Repository) RequestTranscodeStream(filepath string, clientId string) (r
 		return nil, errors.New("module not initialized")
 	}
 
+	// If hwaccel is enabled, probe whether the GPU can actually decode the
+	// source codec. When it can't, ffmpeg's implicit -hwaccel form silently
+	// falls back to CPU decode while still claiming hwaccel, pegging a core
+	// at 100% on codecs like AV1 on older Maxwell/Pascal cards, which starves
+	// the encoder pipeline and prevents the player from ever getting segments.
+	// In that case, redirect to direct play so the client decodes locally.
+	settings := r.settings.MustGet()
+	if settings.TranscodeEnabled {
+		if downgraded, dErr := r.maybeDowngradeToDirect(filepath, settings); dErr == nil && downgraded != nil {
+			return downgraded, nil
+		}
+	}
+
 	// Reinitialize the transcoder for each new transcode request
 	if ok := r.initializeTranscoder(r.settings); !ok {
 		return nil, errors.New("real-time transcoder not initialized, check your settings")
@@ -168,6 +181,46 @@ func (r *Repository) RequestTranscodeStream(filepath string, clientId string) (r
 	ret, err = r.playbackManager.RequestPlayback(filepath, StreamTypeTranscode)
 
 	return
+}
+
+// maybeDowngradeToDirect inspects the source codec and, if the configured
+// hwaccel backend cannot hardware-decode it, returns a direct-play media
+// container instead of letting the transcoder spin up. Returns (nil, nil)
+// when hwaccel can handle the codec; in that case the caller should
+// proceed with normal transcode setup.
+func (r *Repository) maybeDowngradeToDirect(filepath string, settings *models.MediastreamSettings) (*MediaContainer, error) {
+	hwAccel := strings.ToLower(strings.TrimSpace(settings.TranscodeHwAccel))
+	if hwAccel == "" || hwAccel == "cpu" || hwAccel == "none" || hwAccel == "disabled" {
+		return nil, nil
+	}
+
+	info, err := r.mediaInfoExtractor.GetInfo(settings.FfprobePath, filepath)
+	if err != nil || info == nil || info.Video == nil {
+		// Without codec info we can't make the decision; let the transcoder
+		// run and surface any failure at that layer.
+		return nil, nil
+	}
+
+	codec := info.Video.Codec
+	if cassette.ProbeDecodeCapability(settings.FfmpegPath, hwAccel, codec, filepath, r.logger) {
+		return nil, nil
+	}
+
+	r.logger.Warn().
+		Str("codec", codec).
+		Str("hwaccel", hwAccel).
+		Str("filepath", filepath).
+		Msg("mediastream: hardware decoder unavailable for source codec, downgrading transcode request to direct play")
+
+	container, err := r.playbackManager.RequestPlayback(filepath, StreamTypeDirect)
+	if err != nil {
+		return nil, err
+	}
+	// Tell the client the server made the call and not to fight us with its
+	// own codec-capability check (which is unreliable for libmpv-capable
+	// codecs the browser reports as "maybe").
+	container.ForceStreamType = true
+	return container, nil
 }
 
 func (r *Repository) RequestPreloadTranscodeStream(filepath string) (err error) {

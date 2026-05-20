@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.6
+
+- 🦺 Mediastream: Auto-fallback to direct play when GPU can't hardware-decode the source codec
+  - When `TranscodeHwAccel` is set to a hardware backend (nvidia, qsv, intel) and the source video codec isn't on that GPU's NVDEC/QSV capability list, seanime now switches the request to direct play instead of starting an ffmpeg transcode
+  - Fixes the case where playing AV1/HEVC-10bit files on Maxwell/Pascal cards (e.g. GTX 960) would silently fall back to software decode, pegging a CPU core at 99% and starving the encoder so segments never arrive, manifesting as the player looping `shutdown-transcode` calls and never loading any video
+  - Probe results are cached per `(hwaccel, codec)` for the process lifetime
+  - Backends without a per-codec probe path (vaapi, videotoolbox, custom) are unaffected and continue to trust the runtime
+  - Added `forceStreamType` field to `Mediastream_MediaContainer` so the frontend respects the server's authoritative choice instead of fighting back with its own `canPlayType` check (which mis-rejects AV1+Opus in MP4 even though libmpv handles it fine)
+- 🦺 Mediastream: Silent audio padding when source audio ends before video (carry-over)
+- 🦺 Docker: Switched runtime base image to debian + jellyfin-ffmpeg7 for NVENC support (carry-over)
+
 ## v3.8.2
 
 - 🦺 VideoCore: Fixed audio selection

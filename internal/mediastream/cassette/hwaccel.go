@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"seanime/internal/mediastream/videofile"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/goccy/go-json"
@@ -337,4 +338,160 @@ func FormatHwAccelSummary(p HwAccelProfile) string {
 		}
 	}
 	return fmt.Sprintf("%s (%s)", strings.ToUpper(p.Name), encoder)
+}
+
+// decode capability probe
+
+// nvCuvidDecoders maps ffprobe codec_name to NVIDIA CUVID hardware decoder.
+// If a codec isn't in the map, NVDEC has no hardware path for it on any GPU.
+var nvCuvidDecoders = map[string]string{
+	"h264":       "h264_cuvid",
+	"hevc":       "hevc_cuvid",
+	"vp8":        "vp8_cuvid",
+	"vp9":        "vp9_cuvid",
+	"av1":        "av1_cuvid",
+	"mpeg1video": "mpeg1_cuvid",
+	"mpeg2video": "mpeg2_cuvid",
+	"mpeg4":      "mpeg4_cuvid",
+	"vc1":        "vc1_cuvid",
+}
+
+// qsvDecoders maps ffprobe codec_name to Intel Quick Sync Video decoder.
+var qsvDecoders = map[string]string{
+	"h264":       "h264_qsv",
+	"hevc":       "hevc_qsv",
+	"vp9":        "vp9_qsv",
+	"av1":        "av1_qsv",
+	"mpeg2video": "mpeg2_qsv",
+	"vc1":        "vc1_qsv",
+}
+
+// decodeProbeCache caches probe results so we only pay the ffmpeg invocation
+// once per (hwaccel, codec) tuple per process lifetime.
+//
+// Key: "<hwaccel>:<codec>" e.g. "nvidia:av1"
+// Value: bool
+var decodeProbeCache sync.Map
+
+// ProbeDecodeCapability returns true if the configured hwaccel backend can
+// hardware-decode the given source codec on this host's GPU.
+//
+// It works by invoking ffmpeg with an explicit hardware-codec decoder
+// (e.g. -c:v av1_cuvid) on the actual source file and reading one frame.
+// If the GPU's NVDEC/QSV unit doesn't support the codec, ffmpeg fails to
+// initialize the decoder and the probe returns false. The implicit
+// -hwaccel form (-hwaccel cuda alone) silently falls back to software
+// decode, which is exactly what we want to avoid, so this probe is
+// deliberately stricter.
+//
+// Results are cached per process by (hwAccelKind, sourceCodec) so the
+// probe runs at most once per codec, not per request.
+//
+// For backends without a per-codec decoder name (vaapi, videotoolbox,
+// custom, disabled), this conservatively returns true and lets ffmpeg
+// pick at transcode time.
+func ProbeDecodeCapability(ffmpegPath, hwAccelKind, sourceCodec, samplePath string, logger *zerolog.Logger) bool {
+	if ffmpegPath == "" {
+		ffmpegPath = "ffmpeg"
+	}
+	hwAccelKind = strings.ToLower(strings.TrimSpace(hwAccelKind))
+	sourceCodec = strings.ToLower(strings.TrimSpace(sourceCodec))
+
+	// CPU encoding doesn't depend on a hardware decoder; ffmpeg software-decodes
+	// in the worker threads, and the caller already accepted that cost when
+	// they picked "cpu" / "disabled".
+	if hwAccelKind == "" || hwAccelKind == "cpu" || hwAccelKind == "none" || hwAccelKind == "disabled" {
+		return true
+	}
+
+	// Resolve "auto" to whatever the encoder probe picks, since we need a
+	// concrete backend name to look up the right decoder.
+	if hwAccelKind == "auto" {
+		hwAccelKind = probeHardwareEncoder(ffmpegPath, logger)
+		if hwAccelKind == "disabled" {
+			return true
+		}
+	}
+
+	cacheKey := hwAccelKind + ":" + sourceCodec
+	if v, ok := decodeProbeCache.Load(cacheKey); ok {
+		return v.(bool)
+	}
+
+	var decoder string
+	switch hwAccelKind {
+	case "nvidia":
+		decoder = nvCuvidDecoders[sourceCodec]
+	case "qsv", "intel":
+		decoder = qsvDecoders[sourceCodec]
+	case "vaapi", "videotoolbox", "custom":
+		// These backends don't expose per-codec decoder names that we can
+		// probe in isolation; trust the runtime and skip the probe.
+		decodeProbeCache.Store(cacheKey, true)
+		return true
+	default:
+		// Unknown backend; assume the runtime will handle it correctly.
+		decodeProbeCache.Store(cacheKey, true)
+		return true
+	}
+
+	if decoder == "" {
+		// We know this backend, but it has no hardware path for this codec
+		// on any GPU/iGPU in its product line. Treat as unsupported without
+		// even invoking ffmpeg.
+		logger.Warn().
+			Str("codec", sourceCodec).
+			Str("hwaccel", hwAccelKind).
+			Msg("cassette: no hardware decoder mapped for source codec, will not use hwaccel")
+		decodeProbeCache.Store(cacheKey, false)
+		return false
+	}
+
+	if samplePath == "" {
+		// Can't probe without a sample. Assume support and let the runtime
+		// surface failures. We deliberately don't cache this so a later
+		// request with a sample can correct the answer.
+		return true
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, ffmpegPath,
+		"-hide_banner", "-loglevel", "error",
+		"-c:v", decoder,
+		"-i", samplePath,
+		"-frames:v", "1",
+		"-f", "null", "-",
+	)
+	stderr := &strings.Builder{}
+	cmd.Stderr = stderr
+
+	err := cmd.Run()
+	ok := err == nil
+
+	stderrSnippet := stderr.String()
+	if len(stderrSnippet) > 240 {
+		stderrSnippet = stderrSnippet[:240]
+	}
+
+	logger.Info().
+		Bool("ok", ok).
+		Str("codec", sourceCodec).
+		Str("hwaccel", hwAccelKind).
+		Str("decoder", decoder).
+		Str("stderr", stderrSnippet).
+		Msg("cassette: probed hardware decoder")
+
+	decodeProbeCache.Store(cacheKey, ok)
+	return ok
+}
+
+// ResetDecodeProbeCache clears the in-memory cache of decode capability
+// probes. Useful when ffmpeg or hwaccel settings change at runtime.
+func ResetDecodeProbeCache() {
+	decodeProbeCache.Range(func(k, _ any) bool {
+		decodeProbeCache.Delete(k)
+		return true
+	})
 }

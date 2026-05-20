@@ -3395,6 +3395,13 @@ export type Mediastream_MediaContainer = {
      */
     streamUrl: string
     mediaInfo?: MediaInfo
+    /**
+     * When true the server made an authoritative choice of streamType
+     * (e.g. transcode→direct because GPU can't decode the source codec)
+     * and the client should NOT auto-switch based on its own
+     * canPlayType check.
+     */
+    forceStreamType?: boolean
 }
 
 /**
