@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.7
+
+- 🦺 Mediastream: Attachment / subtitle extraction is now non-blocking
+  - The 120s synchronous ffmpeg attachment extraction inside `newMediaContainer` previously timed out on large MKV files served from slow / FUSE storage (e.g. Unraid shfs), returning 500 to the player and putting it into a remount loop on "next episode" presses
+  - Extraction now runs in a background goroutine, the API response returns immediately, and the `/api/v1/mediastream/subs/*` and `/api/v1/mediastream/att/*` handlers wait on the per-hash completion channel before serving (4 min cap)
+  - Concurrent requests for the same hash deduplicate so React remount loops or auto-next races no longer stack ffmpeg invocations against the same file
+  - Internal ffmpeg timeout bumped from 120s to 5 min now that the user-facing request no longer blocks on it
+
 ## v3.8.6
 
 - 🦺 Mediastream: Auto-fallback to direct play when GPU can't hardware-decode the source codec

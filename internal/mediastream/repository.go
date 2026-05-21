@@ -19,17 +19,18 @@ import (
 
 type (
 	Repository struct {
-		transcoder         mo.Option[*cassette.Cassette]
-		settings           mo.Option[*models.MediastreamSettings]
-		playbackManager    *PlaybackManager
-		mediaInfoExtractor *videofile.MediaInfoExtractor
-		logger             *zerolog.Logger
-		wsEventManager     events.WSEventManagerInterface
-		videoCore          *videocore.VideoCore
-		fileCacher         *filecache.Cacher
-		reqMu              sync.Mutex
-		cacheDir           string // where attachments are stored
-		transcodeDir       string // where stream segments are stored
+		transcoder          mo.Option[*cassette.Cassette]
+		settings            mo.Option[*models.MediastreamSettings]
+		playbackManager     *PlaybackManager
+		mediaInfoExtractor  *videofile.MediaInfoExtractor
+		attachmentExtractor *videofile.AttachmentExtractor
+		logger              *zerolog.Logger
+		wsEventManager      events.WSEventManagerInterface
+		videoCore           *videocore.VideoCore
+		fileCacher          *filecache.Cacher
+		reqMu               sync.Mutex
+		cacheDir            string // where attachments are stored
+		transcodeDir        string // where stream segments are stored
 	}
 
 	NewRepositoryOptions struct {
@@ -102,6 +103,9 @@ func (r *Repository) InitializeModules(settings *models.MediastreamSettings, cac
 
 	r.cacheDir = cacheDir
 	r.transcodeDir = transcodeDir
+
+	// Initialize the attachment extractor now that we have the cache dir.
+	r.attachmentExtractor = videofile.NewAttachmentExtractor(cacheDir, r.logger)
 
 	// Initialize the transcoder
 	if ok := r.initializeTranscoder(r.settings); ok {

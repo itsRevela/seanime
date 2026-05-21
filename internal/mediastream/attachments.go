@@ -6,9 +6,16 @@ import (
 	"path/filepath"
 	"seanime/internal/events"
 	"seanime/internal/mediastream/videofile"
+	"time"
 
 	"github.com/labstack/echo/v4"
 )
+
+// attachmentWaitTimeout caps how long a subtitle / font request waits for
+// background extraction before giving up. Large enough to cover the worst
+// real-world MKV walks we've measured on shfs FUSE (~200s) while still being
+// shorter than typical HTTP client timeouts.
+const attachmentWaitTimeout = 4 * time.Minute
 
 func (r *Repository) ServeEchoExtractedSubtitles(c echo.Context) error {
 
@@ -35,6 +42,12 @@ func (r *Repository) ServeEchoExtractedSubtitles(c echo.Context) error {
 
 	if retPath == "" {
 		return errors.New("could not find subtitles")
+	}
+
+	if r.attachmentExtractor != nil {
+		if err := r.attachmentExtractor.WaitForCompletion(c.Request().Context(), mediaContainer.Hash, attachmentWaitTimeout); err != nil {
+			r.logger.Warn().Err(err).Str("hash", mediaContainer.Hash).Msg("mediastream: subtitle wait failed, attempting to serve anyway")
+		}
 	}
 
 	r.logger.Trace().Msgf("mediastream: Serving subtitles from %s", retPath)
@@ -65,7 +78,13 @@ func (r *Repository) ServeEchoExtractedAttachments(c echo.Context) error {
 	retPath := videofile.GetFileAttCacheDir(r.cacheDir, mediaContainer.Hash)
 
 	if retPath == "" {
-		return errors.New("could not find subtitles")
+		return errors.New("could not find attachments")
+	}
+
+	if r.attachmentExtractor != nil {
+		if err := r.attachmentExtractor.WaitForCompletion(c.Request().Context(), mediaContainer.Hash, attachmentWaitTimeout); err != nil {
+			r.logger.Warn().Err(err).Str("hash", mediaContainer.Hash).Msg("mediastream: attachment wait failed, attempting to serve anyway")
+		}
 	}
 
 	subFilePath, _ = url.PathUnescape(subFilePath)

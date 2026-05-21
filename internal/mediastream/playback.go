@@ -141,16 +141,20 @@ func (p *PlaybackManager) newMediaContainer(filepath string, streamType StreamTy
 		return nil, err
 	}
 
-	p.logger.Debug().Msg("mediastream: Extracted media info, extracting attachments")
+	p.logger.Debug().Msg("mediastream: Extracted media info, kicking off async attachment extraction")
 
-	// Extract the attachments from the file.
-	err = videofile.ExtractAttachment(p.repository.settings.MustGet().FfmpegPath, filepath, hash, ret.MediaInfo, p.repository.cacheDir, p.logger)
-	if err != nil {
-		p.logger.Error().Err(err).Msg("mediastream: Failed to extract attachments")
-		return nil, err
+	// Kick off attachment extraction in the background. The MediaContainer is
+	// returned immediately; subtitle / font serving handlers wait on the
+	// extractor before responding. This unblocks the API request from the
+	// 30-200s ffmpeg walk that big MKV files need on slow / FUSE storage.
+	if p.repository.attachmentExtractor != nil {
+		_ = p.repository.attachmentExtractor.StartAsync(
+			p.repository.settings.MustGet().FfmpegPath,
+			filepath,
+			hash,
+			ret.MediaInfo,
+		)
 	}
-
-	p.logger.Debug().Msg("mediastream: Extracted attachments")
 
 	streamUrl := ""
 	switch streamType {
