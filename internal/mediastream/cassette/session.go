@@ -302,13 +302,23 @@ func (s *Session) getAudioPipeline(idx int32) *Pipeline {
 	// releases where the dub track is truncated mid-episode), runHead will
 	// substitute silence past this timestamp instead of looping ffmpeg
 	// over a range that has no audio data to produce.
+	//
+	// The threshold here matters: virtually every file has the last audio
+	// packet PTS land 1-2 seconds short of the video duration just because
+	// ffprobe reports packet START times and the final packet (or a brief
+	// natural silence over the end card) sits at the tail. Triggering
+	// padding on every one of those clips real audio off the credits.
+	// We only declare a "truncated audio" condition when the gap is large
+	// enough that it can't be normal end-of-file alignment.
+	const audioTruncationGapSeconds = 5.0
 	audioLastPts, srcSampleRate := probeAudioStreamTail(s.settings.FfprobePath, s.Path, idx, s.logger)
-	if audioLastPts > 0 && audioLastPts+1.0 < float64(s.Info.Duration) {
+	if audioLastPts > 0 && audioLastPts+audioTruncationGapSeconds < float64(s.Info.Duration) {
 		s.logger.Info().
 			Int32("audio", idx).
 			Float64("audioLastPts", audioLastPts).
 			Float64("videoDuration", float64(s.Info.Duration)).
-			Msg("cassette: audio stream ends before video, silent padding will be used")
+			Float64("gap", float64(s.Info.Duration)-audioLastPts).
+			Msg("cassette: audio stream ends well before video, silent padding will be used")
 	} else {
 		// Track is essentially full-length; disable padding so we never
 		// risk substituting silence over real audio.
@@ -336,7 +346,7 @@ func (s *Session) getAudioPipeline(idx int32) *Pipeline {
 // probeAudioStreamTail returns (last packet PTS in seconds, sample rate Hz)
 // for the given audio stream. Either may be 0 if not determinable; callers
 // must treat 0 as "no padding". Reads packet headers for the full audio
-// stream — typically ~1-2 seconds on a 24-minute file since only headers
+// stream; typically ~1-2 seconds on a 24-minute file since only headers
 // are touched, not decoded samples.
 func probeAudioStreamTail(ffprobePath, path string, audioIdx int32, logger *zerolog.Logger) (lastPts float64, sampleRate int) {
 	bin := ffprobePath
@@ -359,7 +369,7 @@ func probeAudioStreamTail(ffprobePath, path string, audioIdx int32, logger *zero
 		}
 	}
 
-	// Last packet PTS — read full audio stream packet headers and keep the
+	// Last packet PTS, read full audio stream packet headers and keep the
 	// last value. The bundled jellyfin-ffmpeg's ffprobe does not accept
 	// -sseof, so we can't tail-only this; the full pass is still fast.
 	cmd := util.NewCmd(bin,

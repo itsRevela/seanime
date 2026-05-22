@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.8
+
+- 🦺 Mediastream: Tightened silent-audio padding threshold to avoid clipping real audio
+  - The audio-ends-before-video padding feature added in v3.8.5 (for fansub releases with truncated dub tracks like Call of the Night S02) was triggering whenever the source's last audio packet PTS fell more than 1 second short of the video duration. That's the normal case for almost every release: ffprobe reports packet start times so the final AAC/Opus frame typically lands 21-30 ms shy of video EOF, and many encodes have 1-2 seconds of natural silence over the end card. The padding then replaced the last 1-2 seconds of every episode's real audio with synthetic silence.
+  - Threshold bumped from 1.0 s to 5.0 s. Padding still fires for genuine truncations (Call of the Night S02 had ~47 s gaps; other dual-audio fansubs see similar) but no longer eats the tail of normal-length tracks.
+
 ## v3.8.7
 
 - 🦺 Mediastream: Attachment / subtitle extraction is now non-blocking

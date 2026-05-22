@@ -236,7 +236,7 @@ func subtitlesAlreadyOnDisk(cacheDir, hash string, mediaInfo *MediaInfo) bool {
 		expected++
 	}
 	if expected == 0 {
-		// Nothing to extract — there's no reason to walk the file. Treat as done.
+		// Nothing to extract; no reason to walk the file. Treat as done.
 		return true
 	}
 	subsPath := GetFileSubsCacheDir(cacheDir, hash)

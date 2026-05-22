@@ -77,7 +77,7 @@ func (st *SegmentTable) MarkReady(seg int32, encoderID int) {
 	defer st.mu.Unlock()
 	select {
 	case <-st.segments[seg].ch:
-		// Already closed — idempotent.
+		// Already closed; idempotent.
 	default:
 		st.segments[seg].encoderID = encoderID
 		close(st.segments[seg].ch)

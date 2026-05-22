@@ -153,7 +153,7 @@ func (p *Pipeline) reclaimExistingSegments() {
 	dir := filepath.Dir(p.outPathFmt(0))
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return // Not an error — dir may not exist yet.
+		return // Not an error; dir may not exist yet.
 	}
 
 	pattern := filepath.Base(p.outPathFmt(0))
@@ -170,7 +170,7 @@ func (p *Pipeline) reclaimExistingSegments() {
 		if seg < 0 || seg >= int32(p.segments.Len()) {
 			continue
 		}
-		// File exists on disk — mark as ready with encoder ID 0.
+		// File exists on disk, mark as ready with encoder ID 0.
 		if !p.segments.IsReady(seg) {
 			p.segments.MarkReady(seg, 0)
 			reclaimed++
@@ -507,7 +507,7 @@ func (p *Pipeline) runHeadCore(start, end int32, silent bool) error {
 		// Silent placeholder mode: substitute lavfi anullsrc for the file
 		// input. The segment muxer below still cuts at the same keyframe
 		// boundaries as a real encode, so the produced .ts files are
-		// drop-in replacements for the real audio segments — they just
+		// drop-in replacements for the real audio segments and just
 		// carry silence. Used when the source audio stream ends before
 		// the video does (a defect in some releases).
 		rate := p.audioOutputRate
