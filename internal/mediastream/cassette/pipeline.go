@@ -206,6 +206,22 @@ func (p *Pipeline) GetIndex(token string) (string, error) {
 // GetSegment blocks until the requested segment is ready and returns the path
 // to the .ts file on disk
 func (p *Pipeline) GetSegment(ctx context.Context, seg int32) (string, error) {
+	// Reject obviously invalid segment indices before they reach the
+	// internal SegmentTable / KeyframeIndex lookups, which would either
+	// return sentinel values silently (no longer panic, but still wrong
+	// behavior to compute distances over) or, for KeyframeIndex.Get,
+	// previously panicked. Clients can request seg = N (one past the
+	// last keyframe of length N) by seeking near file end after a long
+	// pause; returning an error lets the HTTP handler respond with a
+	// proper 4xx instead of taking the process down or hanging.
+	if seg < 0 {
+		return "", fmt.Errorf("cassette: %s segment %d invalid (negative)", p.label, seg)
+	}
+	keyframeLen, _ := p.session.Keyframes.Length()
+	if seg >= keyframeLen {
+		return "", fmt.Errorf("cassette: %s segment %d past end of file (keyframes=%d)", p.label, seg, keyframeLen)
+	}
+
 	// Recreate the kill channel so that a previously-killed pipeline can
 	// service new requests
 	p.killCh = make(chan struct{})

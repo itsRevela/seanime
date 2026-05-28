@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.10
+
+- 🦺 Cassette: Fixed a second panic site on the segment lookup path
+  - After the segment-table bounds-check shipped in v3.8.9, `Pipeline.GetSegment` could still reach `minHeadDistance` for an out-of-range segment, which called `KeyframeIndex.Get(idx)` and panicked with `runtime error: index out of range [328] with length 328`. Reproduced when resuming playback after a long pause: hls.js requested a segment past the last keyframe.
+  - `KeyframeIndex.Get` and `Slice` are now bounds-checked (return sentinel `0` / `nil` instead of panicking).
+  - `Pipeline.GetSegment` rejects out-of-range segments up front with an error so the HTTP handler returns a proper 4xx instead of indirectly triggering a panic deeper in the stack.
+
 ## v3.8.9
 
 - 🦺 Mediastream: Don't treat zero-byte subtitle stubs as "already extracted"

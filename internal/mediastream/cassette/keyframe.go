@@ -24,20 +24,35 @@ type KeyframeIndex struct {
 	listeners []func(keyframes []float64)
 }
 
-// Get returns the keyframe timestamp
+// Get returns the keyframe timestamp at idx, or 0 if idx is out of range.
+// Out-of-range indices used to panic, but the calling pipeline can legitimately
+// reach them (e.g. when the client requests a segment past file end after a
+// long pause) and a panic would take the whole process down. Returning 0 keeps
+// downstream distance comparisons valid without crashing.
 func (ki *KeyframeIndex) Get(idx int32) float64 {
 	ki.mu.RLock()
 	defer ki.mu.RUnlock()
+	if idx < 0 || int(idx) >= len(ki.Keyframes) {
+		return 0
+	}
 	return ki.Keyframes[idx]
 }
 
-// Slice returns a copy of keyframe timestamps
+// Slice returns a copy of keyframe timestamps in [start, end). Out-of-range
+// or inverted ranges return nil instead of panicking.
 func (ki *KeyframeIndex) Slice(start, end int32) []float64 {
-	if end <= start {
+	if end <= start || start < 0 {
 		return nil
 	}
 	ki.mu.RLock()
 	defer ki.mu.RUnlock()
+	n := int32(len(ki.Keyframes))
+	if start >= n {
+		return nil
+	}
+	if end > n {
+		end = n
+	}
 	out := make([]float64, end-start)
 	copy(out, ki.Keyframes[start:end])
 	return out
