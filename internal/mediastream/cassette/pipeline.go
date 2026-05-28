@@ -140,6 +140,15 @@ func NewPipeline(cfg PipelineConfig) *Pipeline {
 		cfg.Session.Keyframes.AddListener(func(keyframes []float64) {
 			segments.Grow(len(keyframes))
 		})
+		// Re-sync after listener registration to close the race window
+		// between the Length() read above and AddListener: any keyframes
+		// added during that gap would fire the listener before it was
+		// registered and be missed, leaving the table undersized. A second
+		// Length() read here lets us catch up to the current keyframe
+		// count without depending on a future listener event.
+		if currentLen, _ := cfg.Session.Keyframes.Length(); int(currentLen) > segments.Len() {
+			segments.Grow(int(currentLen))
+		}
 	}
 
 	// Scan for existing segments on disk (segment reuse).

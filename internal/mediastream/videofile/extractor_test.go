@@ -145,6 +145,51 @@ func TestSubtitlesAlreadyOnDisk_MissingFiles(t *testing.T) {
 	}
 }
 
+func TestSubtitlesAlreadyOnDisk_ZeroByteFilesDoNotCount(t *testing.T) {
+	t.Parallel()
+
+	cacheDir := t.TempDir()
+	hash := "stubs-only"
+	mediaInfo := &MediaInfo{
+		Subtitles: []Subtitle{
+			{Index: 0, Extension: strPtr("ass")},
+			{Index: 1, Extension: strPtr("ass")},
+		},
+	}
+
+	// Simulate the failure mode that bit us in the wild: ffmpeg created
+	// the output files but was killed before writing any data.
+	subs := GetFileSubsCacheDir(cacheDir, hash)
+	if err := os.MkdirAll(subs, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"0.ass", "1.ass"} {
+		if err := os.WriteFile(filepath.Join(subs, name), nil, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if subtitlesAlreadyOnDisk(cacheDir, hash, mediaInfo) {
+		t.Error("expected false: zero-byte stubs should not count as extracted")
+	}
+
+	// Populate one of the two with content. Still not enough.
+	if err := os.WriteFile(filepath.Join(subs, "0.ass"), []byte("[Script Info]\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if subtitlesAlreadyOnDisk(cacheDir, hash, mediaInfo) {
+		t.Error("expected false: only one of two subs has content")
+	}
+
+	// Populate both. Now we're truly done.
+	if err := os.WriteFile(filepath.Join(subs, "1.ass"), []byte("[Script Info]\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if !subtitlesAlreadyOnDisk(cacheDir, hash, mediaInfo) {
+		t.Error("expected true: both subs have content")
+	}
+}
+
 func TestAttachmentExtractor_FailedJob_RetriedOnNextStart(t *testing.T) {
 	t.Parallel()
 

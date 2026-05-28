@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.9
+
+- 🦺 Mediastream: Don't treat zero-byte subtitle stubs as "already extracted"
+  - `subtitlesAlreadyOnDisk` counted every entry in the cache directory, including the empty output files ffmpeg creates upfront when it's killed mid-write (e.g. by a "no space left on device" mid-extraction). Subsequent plays of the same file then saw the stub count match the expected subtitle count and skipped re-extraction, leaving the player with empty subtitle files. Only non-empty files now count towards "extracted".
+- 🦺 Mediastream: Stop recreating the cassette transcoder on every transcode request
+  - `RequestTranscodeStream` previously called `initializeTranscoder` unconditionally, which destroyed and recreated the entire cassette including a `streamDir` wipe in `cassette.New`. With the React remount loop firing multiple transcode requests within milliseconds (e.g. on "next episode"), an ffmpeg from request N+0 could still be writing segments when request N+1 wiped its output directory, producing `ffmpeg process failed: No such file or directory` (exit 254) and a brief "Playback error occurred" toast.
+  - Initialization is now idempotent: the cassette is created once at module init and reused across requests. The wholesale `streamDir` wipe moved out of `cassette.New` (where it raced with active sessions) into a one-shot `cleanStaleTranscodeDirs` called during `Repository.InitializeModules`.
+- 🦺 VideoCore: Recover transparently from fatal hls.js errors instead of immediately surfacing "Playback error occurred"
+  - The HLS error handler was commented-out for `NETWORK_ERROR` and `MEDIA_ERROR` recovery and went straight to `hls.destroy()` + toast on any fatal event. Pressing "next episode" triggers a brief cassette destroy/re-init on the server, which lets hls.js see a transient segment 404 it reports as fatal NETWORK_ERROR. We now call `hls.startLoad()` (network) or `hls.recoverMediaError()` (media) up to twice per source before giving up, matching hls.js's documented recovery pattern.
+- 🦺 Cassette: Fixed panic when SegmentTable was accessed with an out-of-range index
+  - `IsReady`, `MarkReady`, `EncoderID`, and `WaitFor` did unchecked slice access. A race in `NewPipeline` between `Keyframes.Length()` and `AddListener` could leave the segment table undersized while `firstSegmentAtOrAfter` (using fresh keyframe data) computed a higher index, causing `panic: runtime error: index out of range [228] with length 100` that took the whole seanime process down on certain files (reproduced on KonoSuba S02E06).
+  - All `SegmentTable` methods are now bounds-checked: `IsReady`/`EncoderID` return sentinel values, `MarkReady` is a no-op, and `WaitFor` returns an error instead of panicking.
+  - `NewPipeline` re-syncs the table to the current keyframe count after registering the listener, closing the race window for keyframes added between `Length()` and `AddListener`.
+
 ## v3.8.8
 
 - 🦺 Mediastream: Tightened silent-audio padding threshold to avoid clipping real audio

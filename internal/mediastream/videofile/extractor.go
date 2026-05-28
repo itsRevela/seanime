@@ -244,7 +244,23 @@ func subtitlesAlreadyOnDisk(cacheDir, hash string, mediaInfo *MediaInfo) bool {
 	if err != nil {
 		return false
 	}
-	return len(entries) >= expected
+	// Count only non-empty files. Zero-byte entries are leftovers from a
+	// previous extraction that ffmpeg created as outputs but failed to
+	// populate (e.g. killed mid-write by a 'no space left on device' error
+	// or a process timeout). Treating those as "extracted" would skip the
+	// next legitimate attempt and serve empty subtitles to the player.
+	populated := 0
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || info.Size() == 0 {
+			continue
+		}
+		populated++
+	}
+	return populated >= expected
 }
 
 // WaitForFile blocks until path exists or the wait deadline is reached. Used

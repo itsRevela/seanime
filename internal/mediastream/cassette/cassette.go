@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"seanime/internal/mediastream/videofile"
 	"sync"
@@ -47,14 +46,13 @@ func New(opts *NewCassetteOptions) (*Cassette, error) {
 		return nil, fmt.Errorf("cassette: failed to create stream dir: %w", err)
 	}
 
-	// clear stale segment dirs from previous runs.
-	entries, err := os.ReadDir(streamDir)
-	if err != nil {
-		return nil, err
-	}
-	for _, e := range entries {
-		_ = os.RemoveAll(path.Join(streamDir, e.Name()))
-	}
+	// Don't wipe the streamDir here. Per-session cleanup happens in
+	// Session.Destroy (kills ffmpeg + os.RemoveAll(s.Out)) so dirs are
+	// reclaimed at the right granularity. A wholesale wipe at cassette
+	// construction would race with any ffmpeg from a not-fully-destroyed
+	// prior cassette that's still writing segments, producing
+	// "No such file or directory" failures. The Repository handles
+	// process-startup cleanup separately via CleanStaleTranscodeDirs.
 
 	hwAccel := BuildHwAccelProfile(HwAccelOptions{
 		Kind:           opts.HwAccelKind,

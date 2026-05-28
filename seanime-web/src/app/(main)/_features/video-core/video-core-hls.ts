@@ -207,28 +207,55 @@ export function useVideoCoreHls({
                 setCurrentAudioTrack(hls.audioTrack)
             })
 
+            // Track per-instance recovery attempts so we don't loop forever on
+            // a genuinely broken stream. Reset whenever we successfully load
+                // a manifest, so each new source gets a fresh budget.
+            let networkRecoveryAttempts = 0
+            let mediaRecoveryAttempts = 0
+            const MAX_NETWORK_RECOVERIES = 2
+            const MAX_MEDIA_RECOVERIES = 2
+
+            hls.on(Events.MANIFEST_LOADED, () => {
+                networkRecoveryAttempts = 0
+                mediaRecoveryAttempts = 0
+            })
+
             hls.on(Events.ERROR, (event, data: ErrorData) => {
                 hlsLog.error("HLS error", data)
                 if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR || data.details === Hls.ErrorDetails.BUFFER_NUDGE_ON_STALL) {
                     onStalled?.(data)
                 }
-                if (data.fatal) {
-                    hlsLog.error("Fatal error, cannot recover")
-                    hls.destroy()
-                    onFatalError?.(data)
-                    // switch (data.type) {
-                    //     case Hls.ErrorTypes.NETWORK_ERROR:
-                    //         hlsLog.error("Fatal network error, trying to recover")
-                    //         hls.startLoad()
-                    //         break
-                    //     case Hls.ErrorTypes.MEDIA_ERROR:
-                    //         hlsLog.error("Fatal media error, trying to recover")
-                    //         hls.recoverMediaError()
-                    //         break
-                    //     default:
-                    //         break
-                    // }
+                if (!data.fatal) return
+
+                // Many "fatal" hls.js errors are recoverable: NETWORK_ERROR
+                // commonly fires when an upstream segment isn't ready yet
+                // (e.g. the cassette is restarting between episode switches),
+                // and MEDIA_ERROR fires on transient demuxer hiccups. Calling
+                // the documented recovery APIs lets the player resume instead
+                // of dying and showing the user a toast. We only escalate to
+                // truly-fatal after a few failed recoveries.
+                switch (data.type) {
+                    case Hls.ErrorTypes.NETWORK_ERROR:
+                        if (networkRecoveryAttempts < MAX_NETWORK_RECOVERIES) {
+                            networkRecoveryAttempts++
+                            hlsLog.warning(`Fatal network error, attempting recovery (${networkRecoveryAttempts}/${MAX_NETWORK_RECOVERIES})`)
+                            hls.startLoad()
+                            return
+                        }
+                        break
+                    case Hls.ErrorTypes.MEDIA_ERROR:
+                        if (mediaRecoveryAttempts < MAX_MEDIA_RECOVERIES) {
+                            mediaRecoveryAttempts++
+                            hlsLog.warning(`Fatal media error, attempting recovery (${mediaRecoveryAttempts}/${MAX_MEDIA_RECOVERIES})`)
+                            hls.recoverMediaError()
+                            return
+                        }
+                        break
                 }
+
+                hlsLog.error("Fatal error, cannot recover")
+                hls.destroy()
+                onFatalError?.(data)
             })
 
             return () => {

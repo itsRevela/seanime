@@ -104,6 +104,13 @@ func (r *Repository) InitializeModules(settings *models.MediastreamSettings, cac
 	r.cacheDir = cacheDir
 	r.transcodeDir = transcodeDir
 
+	// Clean up stale per-session segment dirs from previous crashes / restarts
+	// once, at module init. The cassette no longer does this on each
+	// (re-)creation because it raced with in-flight ffmpegs from prior
+	// requests; this single startup wipe is safe because no sessions exist
+	// yet for this process.
+	r.cleanStaleTranscodeDirs(transcodeDir)
+
 	// Initialize the attachment extractor now that we have the cache dir.
 	r.attachmentExtractor = videofile.NewAttachmentExtractor(cacheDir, r.logger)
 
@@ -117,6 +124,27 @@ func (r *Repository) InitializeModules(settings *models.MediastreamSettings, cac
 // CacheWasCleared should be called when the cache directory is manually cleared.
 func (r *Repository) CacheWasCleared() {
 	r.playbackManager.mediaContainers.Clear()
+}
+
+// cleanStaleTranscodeDirs removes any per-session segment subdirectories
+// left over from a previous run of the process. Called once at module
+// initialization. Per-session cleanup during normal operation is handled
+// by Session.Destroy.
+func (r *Repository) cleanStaleTranscodeDirs(transcodeDir string) {
+	streamDir := filepath.Join(transcodeDir, "streams")
+	entries, err := os.ReadDir(streamDir)
+	if err != nil {
+		return // Stream dir doesn't exist yet; nothing to do.
+	}
+	removed := 0
+	for _, e := range entries {
+		if err := os.RemoveAll(filepath.Join(streamDir, e.Name())); err == nil {
+			removed++
+		}
+	}
+	if removed > 0 {
+		r.logger.Debug().Int("count", removed).Msg("mediastream: cleaned stale per-session transcode dirs at startup")
+	}
 }
 
 func (r *Repository) ClearTranscodeDir() {
@@ -177,9 +205,21 @@ func (r *Repository) RequestTranscodeStream(filepath string, clientId string) (r
 		}
 	}
 
-	// Reinitialize the transcoder for each new transcode request
-	if ok := r.initializeTranscoder(r.settings); !ok {
-		return nil, errors.New("real-time transcoder not initialized, check your settings")
+	// Only initialize the transcoder if it doesn't already exist. The
+	// previous version destroyed and recreated the cassette on every
+	// transcode request, which raced with in-flight ffmpeg processes
+	// from prior requests: cassette.New wipes the streams dir during
+	// init, and a React remount loop sending two requests within
+	// milliseconds could yank a per-session output dir out from under
+	// an ffmpeg that was still writing to it, producing
+	// "No such file or directory" failures.
+	//
+	// The cassette safely handles multiple concurrent sessions for
+	// different files; there's no need to throw it away each time.
+	if !r.TranscoderIsInitialized() {
+		if ok := r.initializeTranscoder(r.settings); !ok {
+			return nil, errors.New("real-time transcoder not initialized, check your settings")
+		}
 	}
 
 	ret, err = r.playbackManager.RequestPlayback(filepath, StreamTypeTranscode)
