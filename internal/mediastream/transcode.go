@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
-	"github.com/samber/mo"
 )
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -169,12 +168,15 @@ func (r *Repository) ShutdownTranscodeStream(clientId string) {
 	// Kill playback
 	r.playbackManager.KillPlayback()
 
-	// Destroy the current transcoder
-	r.transcoder.MustGet().Destroy()
-
-	// Load a new transcoder
-	r.transcoder = mo.None[*cassette.Cassette]()
-	r.initializeTranscoder(r.settings)
+	// Kill the active encoder sessions (stops in-flight ffmpegs) but keep
+	// the cassette + its keyframe cache alive. The previous version did a
+	// full Destroy + reinit on every shutdown call, which under the React
+	// remount loop (one shutdown-transcode per second) repeatedly cleared
+	// the global keyframe cache and forced every subsequent playback to
+	// re-run a 20-40 second ffprobe keyframe analysis. Movies in
+	// particular felt "stuck buffering" because the analysis never had
+	// time to complete before being thrown away.
+	r.transcoder.MustGet().KillActiveSessions()
 
 	// Send event
 	r.wsEventManager.SendEvent(events.MediastreamShutdownStream, nil)

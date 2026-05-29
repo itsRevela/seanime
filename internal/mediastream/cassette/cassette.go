@@ -116,6 +116,29 @@ func (c *Cassette) Destroy() {
 	c.logger.Debug().Msg("cassette: destroyed")
 }
 
+// KillActiveSessions tears down all in-flight encoder sessions but keeps the
+// cassette + its keyframe cache alive. Used by the HTTP shutdown-transcode
+// handler which previously did a full Destroy + reinit on every call; that
+// threw away the (often 20-40 second) keyframe analysis when the React
+// remount loop fired shutdown-transcode every second, forcing every
+// subsequent transcode to re-run keyframe analysis from scratch.
+func (c *Cassette) KillActiveSessions() {
+	defer func() {
+		if r := recover(); r != nil {
+			c.logger.Warn().Interface("recover", r).Msg("cassette: recovered during KillActiveSessions")
+		}
+	}()
+
+	c.logger.Debug().Msg("cassette: killing all active sessions (keeping keyframe cache)")
+	c.sessions.Range(func(key, value any) bool {
+		if s, ok := value.(*Session); ok {
+			s.Destroy()
+		}
+		c.sessions.Delete(key)
+		return true
+	})
+}
+
 // session management
 
 func (c *Cassette) getSession(

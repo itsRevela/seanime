@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.11
+
+- 🦺 Mediastream: shutdown-transcode no longer destroys the cassette + keyframe cache
+  - `Repository.ShutdownTranscodeStream` (the handler for `POST /api/v1/mediastream/shutdown-transcode`) was calling `cassette.Destroy()` + reinitializing the cassette on every invocation. `Destroy()` clears the global keyframe cache, so the React remount loop firing one shutdown-transcode per second meant every cassette had to re-run the (often 20-40 second) ffprobe keyframe analysis from scratch. Movies in particular felt permanently "stuck buffering" because the analysis never completed before being thrown away.
+  - Added `Cassette.KillActiveSessions()` which tears down in-flight encoder sessions (stops ffmpeg) but keeps the cassette + its keyframe cache alive. The shutdown handler now calls this instead of the full destroy + reinit dance.
+
 ## v3.8.10
 
 - 🦺 Cassette: Fixed a second panic site on the segment lookup path
