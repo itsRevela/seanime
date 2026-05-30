@@ -619,26 +619,10 @@ func (p *Pipeline) runHeadCore(start, end int32, silent bool) error {
 		segStr := toSegmentStr(segmentTimes)
 		args = append(args, p.buildArgs(segStr)...)
 
-		if p.kind == AudioKind {
-			// Audio is transmuxed (-c:a copy) or AAC-encoded with -copyts.
-			// In both cases ffmpeg's demuxer-level seek for MKV lands on the
-			// containing Matroska cluster (which can begin several seconds
-			// before the requested -ss point), and -start_at_zero does not
-			// rebase the output PTS to zero, so the produced packets carry
-			// source-absolute timestamps. The segment muxer must therefore
-			// be given absolute source-time cut points; otherwise it cuts
-			// near arbitrary audio packet boundaries far from the keyframe
-			// positions the HLS playlist advertises, leaving segment files
-			// whose content does not match their filename / playlist index.
-			relTimes = segmentTimes
-		} else {
-			// Video pipelines use -noaccurate_seek so the demuxer lands
-			// exactly on the requested video keyframe, and -start_at_zero
-			// rebases the output PTS to zero from that seek point.
-			relTimes = lo.Map(segmentTimes, func(t float64, _ int) float64 {
-				return t - p.session.Keyframes.Get(startSeg)
-			})
-		}
+		// Compute segment_times relative to -ss start.
+		relTimes = lo.Map(segmentTimes, func(t float64, _ int) float64 {
+			return t - p.session.Keyframes.Get(startSeg)
+		})
 		segmentStartNumber = startSeg
 	}
 

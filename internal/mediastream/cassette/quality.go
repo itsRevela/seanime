@@ -226,25 +226,24 @@ type AudioTranscodeDecision struct {
 	Channels string
 }
 
-// DecideAudioTranscode
-// - If the source is already AAC: copy it
-// - If the source has ≤ 2 channels: encode to AAC stereo @ 128k
-// - If the source has > 2 channels: encode to AAC preserving layout @ 384k
+// DecideAudioTranscode always re-encodes to AAC, even when the source is
+// already AAC. -c:a copy is not safe in this pipeline: ffmpeg's MKV
+// demuxer-level seek for stream-copy audio lands on the start of the
+// Matroska cluster containing the requested -ss point, which can be
+// several seconds before that point and varies per spawn. Each new
+// encoder head (one per ~100 segments) therefore picks up a different
+// cluster-start offset, so segment file content shifts between
+// per-head ranges and creates an audible audio dropout at the boundary
+// (e.g. around segment 199/200 of a 4 s-keyframe file).
+//
+// With re-encoding, -ss + the default -accurate_seek decodes forward
+// to land exactly on the requested keyframe time, so every head's
+// output starts at the same source position and -segment_times
+// relative to -ss matches the HLS playlist's keyframe-derived
+// segment boundaries. The CPU cost of AAC encoding is small compared
+// to the video transcode and trivial on the hardware-accel hosts we
+// target.
 func DecideAudioTranscode(audio *videofile.Audio) AudioTranscodeDecision {
-	// just copy aac
-	if audio.Codec == "aac" {
-		channels := "2"
-		if audio.Channels > 2 {
-			channels = fmt.Sprintf("%d", audio.Channels)
-		}
-		return AudioTranscodeDecision{
-			Copy:     true,
-			Codec:    "copy",
-			Channels: channels,
-		}
-	}
-
-	// everything else needs re-encoding to AAC
 	channels := "2"
 	bitrate := "128k"
 	if audio.Channels > 2 {

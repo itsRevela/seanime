@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.13
+
+- 🦺 Mediastream: Force AAC re-encode for the segmented audio pipeline
+  - v3.8.12's attempt to fix the audio dropout by passing `-segment_times` as absolute source-time values regressed the pipeline to produce only the discarded pre-segment file (no playable audio segments at all). Reverted that change.
+  - The real cause of the original dropout was `-c:a copy`. For MKV input ffmpeg's demuxer-level seek for stream-copy audio lands on the start of the containing Matroska cluster rather than the requested `-ss` point. Each new encoder head (one per ~100 segments) ends up with a different cluster-start offset, so the source-time content of two adjacent ranges (e.g. segment 199 produced by head A, segment 200 produced by head B) shifts by a different amount relative to the HLS playlist's keyframe-derived segment timing. The result was an audible audio jump at every head boundary, which lined up with 13:56 on the user's `Isekai Cheat Magician E02`.
+  - `DecideAudioTranscode` now always asks for AAC re-encoding. With re-encoding, the default `-accurate_seek` decodes forward to land exactly on the requested keyframe, so every head starts at the same source position and the existing `-segment_times` relative to `-ss` matches the playlist's segment boundaries.
+  - Added `quality_test.go` covering the contract: aac/flac/opus sources, stereo and surround, all re-encode rather than copy.
+
 ## v3.8.12
 
 - 🦺 Mediastream: Fixed deterministic audio dropout caused by misaligned audio segment cuts
