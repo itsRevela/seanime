@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.12
+
+- 🦺 Mediastream: Fixed deterministic audio dropout caused by misaligned audio segment cuts
+  - For audio in copy / transmux mode, the segment muxer was being fed `-segment_times` computed relative to the ffmpeg `-ss` seek point. But for MKV input ffmpeg's demuxer-level seek lands on the start of the containing Matroska cluster, which can be several seconds before the requested keyframe, and `-start_at_zero` does NOT rebase the output PTS to zero in copy mode. The packets that the segment muxer then receives carry source-absolute timestamps, so the relative `-segment_times` values match nothing and cuts land at arbitrary audio packet boundaries. The resulting .ts files contain audio for a different stretch of the file than their filename / HLS playlist index advertises.
+  - Reproduced deterministically as a ~3 s audio dropout at 13:56 of `Isekai Cheat Magician E02`: the player requested segment 197 (keyframe at 836.252 s) but the file on disk contained content for 808.03 → 818.02 s, so hls.js could not match the audio to the video timeline.
+  - Audio pipelines now pass `-segment_times` as absolute source-time keyframe timestamps. Video pipelines are unaffected (they use `-noaccurate_seek`, so the demuxer lands exactly on the requested video keyframe and `-start_at_zero` rebases correctly).
+
 ## v3.8.11
 
 - 🦺 Mediastream: shutdown-transcode no longer destroys the cassette + keyframe cache
