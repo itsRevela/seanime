@@ -2,6 +2,7 @@ package cassette
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -297,34 +298,14 @@ func (s *Session) getAudioPipeline(idx int32) *Pipeline {
 		return filepath.Join(s.Out, fmt.Sprintf("segment-a%d-%d-%%d.ts", idx, eid))
 	}
 
-	// Probe the audio stream's last packet PTS and sample rate. When the
-	// source audio ends before the video does (common in dual-audio fansub
-	// releases where the dub track is truncated mid-episode), runHead will
-	// substitute silence past this timestamp instead of looping ffmpeg
-	// over a range that has no audio data to produce.
-	//
-	// The threshold here matters: virtually every file has the last audio
-	// packet PTS land 1-2 seconds short of the video duration just because
-	// ffprobe reports packet START times and the final packet (or a brief
-	// natural silence over the end card) sits at the tail. Triggering
-	// padding on every one of those clips real audio off the credits.
-	// We only declare a "truncated audio" condition when the gap is large
-	// enough that it can't be normal end-of-file alignment.
-	const audioTruncationGapSeconds = 5.0
-	audioLastPts, srcSampleRate := probeAudioStreamTail(s.settings.FfprobePath, s.Path, idx, s.logger)
-	if audioLastPts > 0 && audioLastPts+audioTruncationGapSeconds < float64(s.Info.Duration) {
-		s.logger.Info().
-			Int32("audio", idx).
-			Float64("audioLastPts", audioLastPts).
-			Float64("videoDuration", float64(s.Info.Duration)).
-			Float64("gap", float64(s.Info.Duration)-audioLastPts).
-			Msg("cassette: audio stream ends well before video, silent padding will be used")
-	} else {
-		// Track is essentially full-length; disable padding so we never
-		// risk substituting silence over real audio.
-		audioLastPts = 0
-	}
-
+	// Build the pipeline with silent-padding disabled and probe the audio
+	// stream tail asynchronously. The probe reads packet headers across the
+	// entire audio stream which previously blocked the audio playlist HTTP
+	// handler for several seconds on Unraid SHFS / slow storage; the
+	// playlist is now returned immediately and the padding decision is
+	// applied to the pipeline once the probe completes (or loaded from a
+	// per-(hash, audioIdx) JSON cache on disk, which makes subsequent opens
+	// of the same file completely skip the probe).
 	p := NewPipeline(PipelineConfig{
 		Kind:               AudioKind,
 		Label:              fmt.Sprintf("audio %d", idx),
@@ -334,13 +315,96 @@ func (s *Session) getAudioPipeline(idx int32) *Pipeline {
 		Logger:             s.logger,
 		BuildArgs:          buildArgs,
 		OutPathFmt:         outFmt,
-		AudioLastPts:       audioLastPts,
+		AudioLastPts:       0,
 		AudioOutputChans:   decision.Channels,
 		AudioOutputBitrate: decision.Bitrate,
-		AudioOutputRate:    srcSampleRate,
+		AudioOutputRate:    0,
 	})
 	s.audios[idx] = p
+
+	go s.applyAudioPaddingAsync(idx, p)
+
 	return p
+}
+
+// audioPadCacheEntry is the on-disk record for one (hash, audio index)
+// pair. lastPts is the last source-time audio packet PTS in seconds;
+// sampleRate is the source sample rate in Hz. Both 0 means "probe ran but
+// found nothing useful" (still cacheable, so we don't re-probe).
+type audioPadCacheEntry struct {
+	LastPts    float64 `json:"lastPts"`
+	SampleRate int     `json:"sampleRate"`
+}
+
+func audioPadCachePath(outDir string, audioIdx int32) string {
+	return filepath.Join(outDir, fmt.Sprintf("audio_%d_pad.json", audioIdx))
+}
+
+// applyAudioPaddingAsync loads or computes the padding parameters for an
+// audio pipeline and pushes them in via Pipeline.SetAudioPadding. Runs in
+// its own goroutine.
+func (s *Session) applyAudioPaddingAsync(idx int32, p *Pipeline) {
+	// audioTruncationGapSeconds: virtually every file has its last audio
+	// packet PTS land 1-2 seconds short of the video duration just because
+	// ffprobe reports packet START times and the final packet (or a brief
+	// natural silence over the end card) sits at the tail. Triggering
+	// padding on every one of those would clip real audio off the credits.
+	// Only declare "truncated audio" when the gap is large enough that it
+	// can't be normal end-of-file alignment.
+	const audioTruncationGapSeconds = 5.0
+
+	cachePath := audioPadCachePath(s.Out, idx)
+	entry, hit := loadAudioPadCache(cachePath)
+	if !hit {
+		lastPts, sampleRate := probeAudioStreamTail(s.settings.FfprobePath, s.Path, idx, s.logger)
+		entry = audioPadCacheEntry{LastPts: lastPts, SampleRate: sampleRate}
+		if err := saveAudioPadCache(cachePath, entry); err != nil {
+			s.logger.Debug().Err(err).Int32("audio", idx).
+				Msg("cassette: audio padding cache save failed")
+		}
+	}
+
+	if entry.LastPts > 0 && entry.LastPts+audioTruncationGapSeconds < float64(s.Info.Duration) {
+		s.logger.Info().
+			Int32("audio", idx).
+			Float64("audioLastPts", entry.LastPts).
+			Float64("videoDuration", float64(s.Info.Duration)).
+			Float64("gap", float64(s.Info.Duration)-entry.LastPts).
+			Bool("cached", hit).
+			Msg("cassette: audio stream ends well before video, silent padding will be used")
+		p.SetAudioPadding(entry.LastPts, entry.SampleRate)
+		return
+	}
+	// Track is essentially full-length; leave padding disabled. We still
+	// publish the sample rate so the silent fallback uses the right rate
+	// if some other condition triggers it later.
+	p.SetAudioPadding(0, entry.SampleRate)
+}
+
+func loadAudioPadCache(path string) (audioPadCacheEntry, bool) {
+	var entry audioPadCacheEntry
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return entry, false
+	}
+	if err := json.Unmarshal(data, &entry); err != nil {
+		return entry, false
+	}
+	return entry, true
+}
+
+func saveAudioPadCache(path string, entry audioPadCacheEntry) error {
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return fmt.Errorf("marshal audio padding cache: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create audio padding cache dir: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("write audio padding cache: %w", err)
+	}
+	return nil
 }
 
 // probeAudioStreamTail returns (last packet PTS in seconds, sample rate Hz)

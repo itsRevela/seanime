@@ -80,10 +80,31 @@ type Pipeline struct {
 	// audio stream ends before the video does (a defect in some releases).
 	// audioLastPts is the timestamp (in seconds) of the last audio packet
 	// in the source stream; 0 disables the silence-padding behaviour.
+	// audioLastPts / audioOutputRate are populated asynchronously after the
+	// pipeline is created (the probe that produces them used to block the
+	// audio playlist HTTP handler), so they need a small lock; chans and
+	// bitrate are set once at construction and treated as immutable.
+	audioPaddingMu     sync.RWMutex
 	audioLastPts       float64
+	audioOutputRate    int
 	audioOutputChans   string
 	audioOutputBitrate string
-	audioOutputRate    int
+}
+
+// SetAudioPadding atomically updates the silent-padding parameters for an
+// audio pipeline. Called by the session once the (async) audio tail probe
+// completes. Safe to call any time during the pipeline's lifetime.
+func (p *Pipeline) SetAudioPadding(lastPts float64, sampleRate int) {
+	p.audioPaddingMu.Lock()
+	defer p.audioPaddingMu.Unlock()
+	p.audioLastPts = lastPts
+	p.audioOutputRate = sampleRate
+}
+
+func (p *Pipeline) audioPadding() (lastPts float64, sampleRate int) {
+	p.audioPaddingMu.RLock()
+	defer p.audioPaddingMu.RUnlock()
+	return p.audioLastPts, p.audioOutputRate
 }
 
 // PipelineConfig configures a new pipeline
@@ -432,22 +453,24 @@ func (p *Pipeline) runHead(start int32) error {
 	// Audio EOF handling: if (part of) this range is past the source audio's
 	// last sample, route those segments through the silent-encode path
 	// instead of having ffmpeg seek past audio EOF and produce nothing.
-	if p.kind == AudioKind && p.audioLastPts > 0 {
-		cutoff := p.firstSegmentAtOrAfter(p.audioLastPts)
-		if cutoff <= start {
-			// Entire range is past audio EOF.
-			return p.runHeadCore(start, end, true)
-		}
-		if cutoff < end {
-			silentStart, silentEnd := cutoff, end
-			end = cutoff
-			go func() {
-				if err := p.runHeadCore(silentStart, silentEnd, true); err != nil {
-					p.logger.Warn().Err(err).
-						Int32("start", silentStart).Int32("end", silentEnd).
-						Msg("cassette: silent audio padding failed")
-				}
-			}()
+	if p.kind == AudioKind {
+		if lastPts, _ := p.audioPadding(); lastPts > 0 {
+			cutoff := p.firstSegmentAtOrAfter(lastPts)
+			if cutoff <= start {
+				// Entire range is past audio EOF.
+				return p.runHeadCore(start, end, true)
+			}
+			if cutoff < end {
+				silentStart, silentEnd := cutoff, end
+				end = cutoff
+				go func() {
+					if err := p.runHeadCore(silentStart, silentEnd, true); err != nil {
+						p.logger.Warn().Err(err).
+							Int32("start", silentStart).Int32("end", silentEnd).
+							Msg("cassette: silent audio padding failed")
+					}
+				}()
+			}
 		}
 	}
 
@@ -535,7 +558,7 @@ func (p *Pipeline) runHeadCore(start, end int32, silent bool) error {
 		// drop-in replacements for the real audio segments and just
 		// carry silence. Used when the source audio stream ends before
 		// the video does (a defect in some releases).
-		rate := p.audioOutputRate
+		_, rate := p.audioPadding()
 		if rate <= 0 {
 			rate = 48000
 		}

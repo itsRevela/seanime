@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.14
+
+- ⚡️ Mediastream: Audio playlist no longer blocks on the audio-tail probe
+  - Every time the player opened a new audio track, `getAudioPipeline` synchronously ran `probeAudioStreamTail`, which reads packet headers across the whole audio stream to find the last PTS (used to decide whether to substitute silence over a truncated dub track near the credits). The probe held the audio mutex and ran on the HTTP path that serves the audio variant playlist, so the player-perceived "switching audio tracks" latency on Unraid SHFS / slow storage was several seconds per switch and re-ran on every cassette re-init.
+  - The probe now runs in its own goroutine. The pipeline is created with silent-padding disabled and the playlist returns immediately; once the probe completes, the resulting `(lastPts, sampleRate)` is pushed into the pipeline via `Pipeline.SetAudioPadding`, protected by a small RWMutex so the runHead read in the silent-encode branch stays race-free.
+  - Added a per-`(hash, audioIndex)` JSON cache at `<streamDir>/<hash>/audio_<idx>_pad.json`. Subsequent opens of the same file load the cached probe result instead of re-scanning the audio stream — most opens after the first now skip the probe entirely.
+  - Worst-case regression for the fansub-truncated-dub case (which the padding was added for): on the very first open of a file whose audio cuts short of video duration, a few seconds of real audio may play past the cutoff before the async probe lands the padding decision. Subsequent opens read the cache and behave exactly as before.
+
 ## v3.8.13
 
 - 🦺 Mediastream: Force AAC re-encode for the segmented audio pipeline
