@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.15
+
+- ✨ VideoCore: Remember the audio track and subtitle track across episode changes
+  - The audio and subtitle managers re-ran their default-selection logic on every episode load and only consulted the global `preferredAudioLanguage` / `preferredSubtitleLanguage` settings, so any manual track pick (via the menu or the cycle keybindings) was forgotten when the next episode loaded. Going from JP-audio + EN-subs in episode 1 to "switch audio to EN dub, turn subs off" and then onto episode 2 would silently revert to JP audio + EN subs.
+  - Two new `localStorage`-backed atoms (`vc_rememberedAudioLanguageAtom`, `vc_rememberedSubtitleLanguageAtom`) capture the language of the last manually-picked track. Picking a track from the audio / subtitle menu, or cycling tracks via the `cycleAudio` / `cycleSubtitles` keybindings, writes to those atoms.
+  - On episode load, the remembered language is prepended to the preferred-language list passed to the audio / subtitle / media-captions managers. Their existing default-selection logic walks the list in order, so the remembered language wins whenever the new file has a matching track and the global preference still acts as the fallback when it doesn't.
+  - "Subtitles off" is also remembered (stored as the sentinel `"none"`, which the existing `getDefaultSubtitleTrackNumber` helper already treats as "leave subtitles disabled").
+
 ## v3.8.14
 
 - ⚡️ Mediastream: Audio playlist no longer blocks on the audio-tail probe

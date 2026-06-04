@@ -6,6 +6,7 @@ import { vc_isFullscreen } from "@/app/(main)/_features/video-core/video-core-at
 import { vc_miniPlayer } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_videoElement } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_containerElement } from "@/app/(main)/_features/video-core/video-core-atoms"
+import { vc_rememberedAudioLanguageAtom } from "@/app/(main)/_features/video-core/video-core.atoms"
 import { VideoCoreControlButtonIcon } from "@/app/(main)/_features/video-core/video-core-control-bar"
 import { HlsAudioTrack, vc_hlsAudioTracks, vc_hlsCurrentAudioTrack } from "@/app/(main)/_features/video-core/video-core-hls"
 import { VideoCoreMenu, VideoCoreMenuBody, VideoCoreMenuTitle, VideoCoreSettingSelect } from "@/app/(main)/_features/video-core/video-core-menu"
@@ -23,6 +24,7 @@ export function VideoCoreAudioMenu() {
     const videoElement = useAtomValue(vc_videoElement)
     const isFullscreen = useAtomValue(vc_isFullscreen)
     const containerElement = useAtomValue(vc_containerElement)
+    const setRememberedAudioLanguage = useSetAtom(vc_rememberedAudioLanguageAtom)
     const [selectedTrack, setSelectedTrack] = React.useState<number | null>(null)
 
     // Get MKV audio tracks
@@ -101,6 +103,18 @@ export function VideoCoreAudioMenu() {
                         }
                     })}
                     onValueChange={(value: number) => {
+                        // Remember this language pick so the next episode's
+                        // audio manager auto-selects the same language
+                        // instead of falling back to the global default.
+                        let language: string | null = null
+                        if (isHls) {
+                            language = (audioTracks as HlsAudioTrack[]).find(t => t.id === value)?.language ?? null
+                        } else {
+                            language = (audioTracks as MKVParser_TrackInfo[]).find(t => t.number === value)?.language ?? null
+                        }
+                        if (language) {
+                            setRememberedAudioLanguage(language)
+                        }
                         audioManager?.selectTrack(value)
                         action({ type: "seek", payload: { time: -1 } })
                     }}
