@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.16
+
+- 🦺 VideoCore: Fixed the v3.8.15 buffering regression on HLS streams with multiple audio tracks
+  - v3.8.15 prepended the user's remembered audio language to `preferredAudioLanguage` and let the audio manager call `hlsSetAudioTrack` on every episode load. With hls.js that meant: hls.js loads the master playlist's default audio rendition, then the audio manager immediately switches to a different rendition, and hls.js ends up loading both audio variant playlists in parallel. Combined with v3.8.13's forced AAC re-encode, that doubled the audio encoder workload on every episode start; on multi-GB BD Remux sources served from Unraid SHFS the parallel video transcode + dual audio re-encode + keyframe analysis + attachment extraction would saturate IO and stall playback a few seconds in.
+  - hls.js gains the remembered audio / subtitle language as `audioPreference` / `subtitlePreference` config at construction time. hls.js resolves the preference during `MANIFEST_PARSED` and only loads the matching audio variant playlist, eliminating the dual-load.
+  - The existing post-attach `hlsSetAudioTrack` call from the audio manager still runs but is now a no-op (hls.js's setter ignores a same-id assignment), so MKV-native playback paths and the global preferred-language fallback continue to behave exactly as before.
+
 ## v3.8.15
 
 - ✨ VideoCore: Remember the audio track and subtitle track across episode changes
