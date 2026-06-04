@@ -2,20 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## v3.8.16
+## v3.8.17
 
-- 🦺 VideoCore: Fixed the v3.8.15 buffering regression on HLS streams with multiple audio tracks
-  - v3.8.15 prepended the user's remembered audio language to `preferredAudioLanguage` and let the audio manager call `hlsSetAudioTrack` on every episode load. With hls.js that meant: hls.js loads the master playlist's default audio rendition, then the audio manager immediately switches to a different rendition, and hls.js ends up loading both audio variant playlists in parallel. Combined with v3.8.13's forced AAC re-encode, that doubled the audio encoder workload on every episode start; on multi-GB BD Remux sources served from Unraid SHFS the parallel video transcode + dual audio re-encode + keyframe analysis + attachment extraction would saturate IO and stall playback a few seconds in.
-  - hls.js gains the remembered audio / subtitle language as `audioPreference` / `subtitlePreference` config at construction time. hls.js resolves the preference during `MANIFEST_PARSED` and only loads the matching audio variant playlist, eliminating the dual-load.
-  - The existing post-attach `hlsSetAudioTrack` call from the audio manager still runs but is now a no-op (hls.js's setter ignores a same-id assignment), so MKV-native playback paths and the global preferred-language fallback continue to behave exactly as before.
-
-## v3.8.15
-
-- ✨ VideoCore: Remember the audio track and subtitle track across episode changes
-  - The audio and subtitle managers re-ran their default-selection logic on every episode load and only consulted the global `preferredAudioLanguage` / `preferredSubtitleLanguage` settings, so any manual track pick (via the menu or the cycle keybindings) was forgotten when the next episode loaded. Going from JP-audio + EN-subs in episode 1 to "switch audio to EN dub, turn subs off" and then onto episode 2 would silently revert to JP audio + EN subs.
-  - Two new `localStorage`-backed atoms (`vc_rememberedAudioLanguageAtom`, `vc_rememberedSubtitleLanguageAtom`) capture the language of the last manually-picked track. Picking a track from the audio / subtitle menu, or cycling tracks via the `cycleAudio` / `cycleSubtitles` keybindings, writes to those atoms.
-  - On episode load, the remembered language is prepended to the preferred-language list passed to the audio / subtitle / media-captions managers. Their existing default-selection logic walks the list in order, so the remembered language wins whenever the new file has a matching track and the global preference still acts as the fallback when it doesn't.
-  - "Subtitles off" is also remembered (stored as the sentinel `"none"`, which the existing `getDefaultSubtitleTrackNumber` helper already treats as "leave subtitles disabled").
+- ↩️ VideoCore: Reverted v3.8.15 (remembered audio / subtitle track across episodes) and v3.8.16 (hls.js audioPreference workaround for it)
+  - Both shipped together still caused buffering a few seconds into playback on the user's library — the hls.js `audioPreference` mitigation in v3.8.16 was not enough to keep the player from stalling. Reverting both for now until a follow-up that doesn't go through the master-playlist / audio-rendition switch path.
+  - The remembered-track behavior is on hold; default-track selection is back to v3.8.14's pure global-preference logic.
 
 ## v3.8.14
 

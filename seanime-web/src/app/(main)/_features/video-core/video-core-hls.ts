@@ -1,9 +1,5 @@
 import { vc_audioManager } from "@/app/(main)/_features/video-core/video-core"
-import {
-    vc_autoPlayVideoAtom,
-    vc_rememberedAudioLanguageAtom,
-    vc_rememberedSubtitleLanguageAtom,
-} from "@/app/(main)/_features/video-core/video-core.atoms"
+import { vc_autoPlayVideoAtom } from "@/app/(main)/_features/video-core/video-core.atoms"
 import { logger } from "@/lib/helpers/debug"
 import Hls, { ErrorData, Events, Level } from "hls.js"
 import { atom, useAtomValue } from "jotai"
@@ -69,19 +65,6 @@ export function useVideoCoreHls({
 
     const audioManager = useAtomValue(vc_audioManager)
     const autoPlay = useAtomValue(vc_autoPlayVideoAtom)
-    // Read here so the useEffect closure captures the current value on every
-    // (re-)init — the effect re-runs on streamUrl change so each episode load
-    // picks up the latest remembered pick. We pass these to hls.js's own
-    // audioPreference / subtitlePreference so it pre-selects the right
-    // rendition at manifest parse time and only loads the matching audio
-    // playlist. v3.8.15 originally drove this via the audio manager's
-    // post-attach `hlsSetAudioTrack` call, which made hls.js load the default
-    // rendition first and then switch — that double-load caused a real
-    // playback stall on heavy files (KonoSuba S03 BD Remux) because v3.8.13's
-    // forced AAC re-encode meant both audio pipelines spawned ffmpeg before
-    // the initial buffer was filled.
-    const rememberedAudioLanguage = useAtomValue(vc_rememberedAudioLanguageAtom)
-    const rememberedSubtitleLanguage = useAtomValue(vc_rememberedSubtitleLanguageAtom)
 
     const [currentAudioTrack, setCurrentAudioTrack] = useAtom(vc_hlsCurrentAudioTrack)
     const setQualityLevels = useSetAtom(vc_hlsQualityLevels)
@@ -126,21 +109,6 @@ export function useVideoCoreHls({
                 backBufferLength: 90,
                 enableWebVTT: true,
                 renderTextTracksNatively: false, // don't use native text tracks for subtitles
-                // Pre-select audio / subtitle renditions matching the user's
-                // last manual pick. Doing it at construction time means hls.js
-                // resolves the preference during MANIFEST_PARSED and only
-                // requests the matching audio variant playlist — avoiding the
-                // dual-load that the audio manager's post-attach switch was
-                // triggering. If the file has no matching rendition, hls.js
-                // falls back to its normal default-selection and our existing
-                // post-attach logic still applies the global preferred
-                // language.
-                ...(rememberedAudioLanguage
-                    ? { audioPreference: { lang: rememberedAudioLanguage } }
-                    : {}),
-                ...(rememberedSubtitleLanguage && rememberedSubtitleLanguage !== "none"
-                    ? { subtitlePreference: { lang: rememberedSubtitleLanguage } }
-                    : {}),
             })
 
             hlsRef.current = hls

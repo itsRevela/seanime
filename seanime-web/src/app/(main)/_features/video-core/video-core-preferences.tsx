@@ -17,8 +17,6 @@ import {
     vc_defaultKeybindings,
     vc_initialSettings,
     vc_keybindingsAtom,
-    vc_rememberedAudioLanguageAtom,
-    vc_rememberedSubtitleLanguageAtom,
     vc_settings,
     vc_showStatsForNerdsAtom,
     vc_storedMutedAtom,
@@ -871,10 +869,6 @@ export function VideoCoreKeybindingController(props: {
     const audioManager = useAtomValue(vc_audioManager)
     const fullscreenManager = useAtomValue(vc_fullscreenManager)
     const pipManager = useAtomValue(vc_pipManager)
-    // Persist the cycle-keybinding pick the same way the menus do, so it
-    // survives the next episode switch.
-    const setRememberedAudioLanguage = useSetAtom(vc_rememberedAudioLanguageAtom)
-    const setRememberedSubtitleLanguage = useSetAtom(vc_rememberedSubtitleLanguageAtom)
 
     const { playEpisode, hasNextEpisode, hasPreviousEpisode } = useVideoCorePlaylist()
 
@@ -1163,11 +1157,7 @@ export function VideoCoreKeybindingController(props: {
             // Enable next track if available
             if (nextTrackNumber > -1) {
                 subtitleManager?.selectTrack(nextTrackNumber)
-                const track = subtitleManager.getTrack(nextTrackNumber)
-                const trackName = track?.label || `Track ${nextTrackNumber}`
-                if (track?.language) {
-                    setRememberedSubtitleLanguage(track.language)
-                }
+                const trackName = subtitleManager.getTrack(nextTrackNumber)?.label || `Track ${nextTrackNumber}`
                 showOverlayFeedback({ message: `Subtitles: ${trackName}` })
                 found = true
             }
@@ -1180,10 +1170,7 @@ export function VideoCoreKeybindingController(props: {
             // Enable next track if available
             if (nextTrack) {
                 mediaCaptionsManager?.selectTrack(nextTrackIdx)
-                const trackName = nextTrack.label || `Track ${nextTrackIdx}`
-                if (nextTrack.language) {
-                    setRememberedSubtitleLanguage(nextTrack.language)
-                }
+                const trackName = mediaCaptionsManager.getTrack(nextTrackIdx)?.label || `Track ${nextTrackIdx}`
                 showOverlayFeedback({ message: `Subtitles: ${trackName}` })
                 found = true
             }
@@ -1191,12 +1178,10 @@ export function VideoCoreKeybindingController(props: {
 
         if (!found) {
             showOverlayFeedback({ message: "Subtitles: Off" })
-            // Explicit cycle-to-off; remember so next episode also opens off.
-            setRememberedSubtitleLanguage("none")
             subtitleManager?.setNoTrack()
             mediaCaptionsManager?.setNoTrack()
         }
-    }, [subtitleManager, mediaCaptionsManager, setRememberedSubtitleLanguage])
+    }, [subtitleManager, mediaCaptionsManager])
 
     const handleCycleAudio = useCallback(() => {
         if (!videoRef.current || !audioManager) return
@@ -1215,9 +1200,6 @@ export function VideoCoreKeybindingController(props: {
             const nextTrack = audioTracks.find(n => n.id === nextTrackNumber)
             if (nextTrack) {
                 const trackName = nextTrack.name || nextTrack.language || `Track ${nextTrack.id + 1}`
-                if (nextTrack.language) {
-                    setRememberedAudioLanguage(nextTrack.language)
-                }
                 showOverlayFeedback({ message: `Audio: ${trackName}` })
                 audioManager.selectTrack(nextTrackNumber)
             }
@@ -1253,13 +1235,9 @@ export function VideoCoreKeybindingController(props: {
         audioTracks.dispatchEvent?.(new Event("change"))
         audioManager.syncSelectedTrack()
 
-        const nextLanguage = audioTracks[nextIndex].language
-        if (nextLanguage) {
-            setRememberedAudioLanguage(nextLanguage)
-        }
-        const trackName = audioTracks[nextIndex].label || nextLanguage || `Track ${nextIndex + 1}`
+        const trackName = audioTracks[nextIndex].label || audioTracks[nextIndex].language || `Track ${nextIndex + 1}`
         showOverlayFeedback({ message: `Audio: ${trackName}` })
-    }, [audioManager, setRememberedAudioLanguage])
+    }, [audioManager])
 
     const log = logger("VideoCoreKeybindings")
 

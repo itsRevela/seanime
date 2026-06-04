@@ -177,33 +177,3 @@ export const vc_storedVolumeAtom = atomWithStorage("sea-video-core-volume", 1, u
 export const vc_storedMutedAtom = atomWithStorage("sea-video-core-muted", false, undefined, { getOnInit: true })
 export const vc_storedPlaybackRateAtom = atomWithStorage("sea-video-core-playback-rate", 1, undefined, { getOnInit: true })
 export const vc_showStatsForNerdsAtom = atomWithStorage("sea-video-core-show-stats-for-nerds", false, undefined, { getOnInit: true })
-
-// vc_rememberedAudioLanguageAtom / vc_rememberedSubtitleLanguageAtom
-//
-// Persist the audio / subtitle language the user last picked via the track
-// menu or the cycle keybindings, so the next episode (and subsequent
-// sessions) auto-select the same language instead of falling back to the
-// global preferredAudioLanguage / preferredSubtitleLanguage defaults.
-//
-// Values are language codes ("eng", "jpn", ...) that get prepended to the
-// effective preferred-language list when constructing the audio/subtitle
-// managers; the existing default-selection logic then naturally picks the
-// remembered language first if the new file has a matching track, and
-// falls through to the global preference list when it does not.
-//
-// "" means "no override, use global preference".
-// "none" on the subtitle atom means "user explicitly turned subs off" — the
-// existing getDefaultSubtitleTrackNumber helper treats "none" as a sentinel
-// for NO_TRACK_NUMBER.
-export const vc_rememberedAudioLanguageAtom = atomWithStorage(
-    "sea-video-core-remembered-audio-language",
-    "",
-    undefined,
-    { getOnInit: true },
-)
-export const vc_rememberedSubtitleLanguageAtom = atomWithStorage(
-    "sea-video-core-remembered-subtitle-language",
-    "",
-    undefined,
-    { getOnInit: true },
-)

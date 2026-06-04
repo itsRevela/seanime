@@ -99,8 +99,6 @@ import {
     vc_autoPlayVideoAtom,
     vc_autoSkipOPEDAtom,
     vc_beautifyImageAtom,
-    vc_rememberedAudioLanguageAtom,
-    vc_rememberedSubtitleLanguageAtom,
     vc_settings,
     vc_showStatsForNerdsAtom,
     vc_storedMutedAtom,
@@ -730,13 +728,6 @@ export function VideoCore(props: VideoCoreProps) {
     // States
     const qc = useQueryClient()
     const settings = useAtomValue(vc_settings)
-    // Per-user remembered track language picks. Read here so handleLoadedMetadata
-    // captures the latest value via closure on each episode load and prepends
-    // them to the preferred-language lists handed to the audio / subtitle
-    // managers — the existing default-selection logic then picks the
-    // remembered language first if a matching track exists in the new file.
-    const [rememberedAudioLanguage, setRememberedAudioLanguage] = useAtom(vc_rememberedAudioLanguageAtom)
-    const [rememberedSubtitleLanguage, setRememberedSubtitleLanguage] = useAtom(vc_rememberedSubtitleLanguageAtom)
     const [isMiniPlayer, setIsMiniPlayer] = useAtom(vc_miniPlayer)
     const [busy, setBusy] = useAtom(vc_busy)
     const [buffering, setBuffering] = useAtom(vc_buffering)
@@ -1038,26 +1029,6 @@ export function VideoCore(props: VideoCoreProps) {
 
         currentPlaybackRef.current = state.playbackInfo.id
 
-        // Build an effective settings view that prepends the user's last
-        // remembered language pick to preferredAudioLanguage /
-        // preferredSubtitleLanguage. The audio / subtitle managers walk that
-        // comma-separated list in order and pick the first matching track,
-        // so prepending the remembered value naturally honors the user's
-        // last manual choice while still falling through to the global
-        // preference when the new file has no matching track. "" means
-        // "user has not picked yet, use the global preference as-is".
-        const effectiveSettings = (rememberedAudioLanguage || rememberedSubtitleLanguage)
-            ? {
-                ...settings,
-                preferredAudioLanguage: rememberedAudioLanguage
-                    ? `${rememberedAudioLanguage},${settings.preferredAudioLanguage}`
-                    : settings.preferredAudioLanguage,
-                preferredSubtitleLanguage: rememberedSubtitleLanguage
-                    ? `${rememberedSubtitleLanguage},${settings.preferredSubtitleLanguage}`
-                    : settings.preferredSubtitleLanguage,
-            }
-            : settings
-
         /*
          * Event or file tracks using libass renderer
          */
@@ -1084,7 +1055,7 @@ export function VideoCore(props: VideoCoreProps) {
                     translateTargetLang: serverStatus?.settings?.mediaPlayer?.vcTranslate
                         ? serverStatus?.settings?.mediaPlayer?.vcTranslateTargetLanguage
                         : null,
-                    settings: effectiveSettings,
+                    settings: settings,
                     fetchAndConvertToVTT: (url?: string, content?: string) => {
                         return new Promise((resolve, reject) => {
                             convertSubs({ url: url ?? "", content: content ?? "", to: "vtt" }, {
@@ -1118,7 +1089,7 @@ export function VideoCore(props: VideoCoreProps) {
                     translateTargetLang: serverStatus?.settings?.mediaPlayer?.vcTranslate
                         ? serverStatus?.settings?.mediaPlayer?.vcTranslateTargetLanguage
                         : null,
-                    settings: effectiveSettings,
+                    settings: settings,
                     fetchAndConvertToASS: (url?: string, content?: string) => {
                         return new Promise((resolve, reject) => {
                             convertSubs({ url: url ?? "", content: content ?? "", to: "ass" }, {
@@ -1144,7 +1115,7 @@ export function VideoCore(props: VideoCoreProps) {
             setAudioManager(new VideoCoreAudioManager({
                 videoElement: v!,
                 playbackInfo: state.playbackInfo,
-                settings: effectiveSettings,
+                settings: settings,
                 onError: (error) => {
                     log.error("Audio manager error", error)
                     onError?.(error)
@@ -1157,7 +1128,7 @@ export function VideoCore(props: VideoCoreProps) {
             setAudioManager(new VideoCoreAudioManager({
                 videoElement: v!,
                 playbackInfo: state.playbackInfo,
-                settings: effectiveSettings,
+                settings: settings,
                 onError: (error) => {
                     log.error("Audio manager error", error)
                     onError?.(error)

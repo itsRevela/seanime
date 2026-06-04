@@ -7,7 +7,6 @@ import { vc_isFullscreen } from "@/app/(main)/_features/video-core/video-core-at
 import { vc_miniPlayer } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_videoElement } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_containerElement } from "@/app/(main)/_features/video-core/video-core-atoms"
-import { vc_rememberedSubtitleLanguageAtom } from "@/app/(main)/_features/video-core/video-core.atoms"
 import { VideoCoreControlButtonIcon } from "@/app/(main)/_features/video-core/video-core-control-bar"
 import { MediaCaptionsTrack } from "@/app/(main)/_features/video-core/video-core-media-captions"
 import { VideoCoreMenu, VideoCoreMenuBody, VideoCoreMenuTitle, VideoCoreSettingSelect } from "@/app/(main)/_features/video-core/video-core-menu"
@@ -30,7 +29,6 @@ export function VideoCoreSubtitleMenu({ inline }: { inline?: boolean }) {
     const videoElement = useAtomValue(vc_videoElement)
     const isFullscreen = useAtomValue(vc_isFullscreen)
     const containerElement = useAtomValue(vc_containerElement)
-    const setRememberedSubtitleLanguage = useSetAtom(vc_rememberedSubtitleLanguageAtom)
     const [selectedTrack, setSelectedTrack] = React.useState<number | null>(null)
 
     const setMenuOpen = useSetAtom(vc_menuOpen)
@@ -156,19 +154,9 @@ export function VideoCoreSubtitleMenu({ inline }: { inline?: boolean }) {
                     ]}
                     onValueChange={(value: number) => {
                         if (value === -1) {
-                            // Explicit "Off" — getDefaultSubtitleTrackNumber
-                            // treats the sentinel "none" in the preferred
-                            // language list as a request to leave subtitles
-                            // disabled, so storing "none" here makes the next
-                            // episode load with subtitles off too.
-                            setRememberedSubtitleLanguage("none")
                             activeManager?.setNoTrack()
                             setSelectedTrack(null)
                             return
-                        }
-                        const language = activeTracks.find(t => t.number === value)?.language
-                        if (language) {
-                            setRememberedSubtitleLanguage(language)
                         }
                         if (subtitleManager) {
                             subtitleManager.selectTrack(value)
