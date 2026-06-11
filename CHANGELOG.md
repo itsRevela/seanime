@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- 🦺 Denshi: Disable Electron auto-updates in this fork
+  - `seanime-denshi/src/main.js` previously set `autoUpdater.autoDownload = true`, `autoUpdater.autoInstallOnAppQuit = true`, and ran `autoUpdater.checkForUpdatesAndNotify()` once per launch — none of which were gated by the in-app "Do not check for updates" toggle (the help text on that toggle explicitly says so). The result was that a Denshi install would silently pull a newer signed build from the configured update channel and swap itself in on next quit, undoing any local patches.
+  - All three are now neutralized at the source. The `check-for-updates` IPC handler still works, so a manual check from the UI is possible; nothing happens automatically.
+
 ## v3.8.17
 
 - ↩️ VideoCore: Reverted v3.8.15 (remembered audio / subtitle track across episodes) and v3.8.16 (hls.js audioPreference workaround for it)

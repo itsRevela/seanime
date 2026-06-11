@@ -1452,8 +1452,16 @@ app.whenReady().then(async () => {
     }
 
     autoUpdater.setFeedURL(updateConfig)
-    autoUpdater.autoDownload = true
-    autoUpdater.autoInstallOnAppQuit = true
+    // Denshi auto-updates are disabled in this fork. The upstream defaults
+    // (autoDownload=true, autoInstallOnAppQuit=true, plus the startup
+    // checkForUpdatesAndNotify() below) would silently pull the latest
+    // signed build from the configured update channel and swap it in on
+    // next quit, ignoring the in-app "Do not check for updates" toggle.
+    // We want the installed Denshi to stay put unless explicitly
+    // upgraded. The "check-for-updates" IPC handler still works so a
+    // manual check via the UI is possible; nothing happens by itself.
+    autoUpdater.autoDownload = false
+    autoUpdater.autoInstallOnAppQuit = false
 
     if (!_development && (process.platform === "darwin" || process.platform === "win32")) {
         app.setLoginItemSettings({
@@ -1569,8 +1577,10 @@ app.whenReady().then(async () => {
         logStartupEvent("Attempting to launch server")
         await launchSeanimeServer(false)
         logStartupEvent("Server launched successfully")
-        // Check for updates only after server launch and main window setup is successful
-        autoUpdater.checkForUpdatesAndNotify()
+        // Auto-update check disabled in this fork — see the
+        // autoUpdater.autoDownload comment above. Manual checks via the
+        // "check-for-updates" IPC handler still work.
+        // autoUpdater.checkForUpdatesAndNotify()
     } catch (error) {
         logStartupEvent("Server launch failed", error.message)
         console.error("[Main] Failed to start server:", error)
