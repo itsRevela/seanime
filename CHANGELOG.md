@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.20
+
+- 🦺 VideoCore: Show the client-mpv settings card and dispatch path when Denshi loads from a remote server
+  - v3.8.19 gated the new client-mpv UI on the build-time `__isElectronDesktop__` constant. That constant is `false` in the seanime-web bundle the Docker server serves, because the Denshi flag is only baked into Denshi's own bundled web copy. Users running Denshi against a remote seanime server (the exact topology client-mpv was built to support) load the Docker-served bundle and so the settings card was invisible, and `handle-play-media.ts` would refuse to take the client-mpv branch even when the IPC bridge was live.
+  - All client-mpv visibility / dispatch checks now read `window.electron.mpv` (preload-injected at runtime) and `window.__isElectronDesktop__` (contextBridge-injected at runtime) instead of the build-time constant. The mpv settings card lives in its own runtime-gated `SettingsCard` outside the build-time Denshi block, so it shows up in both Denshi build variants.
+  - `useIsInsideDenshi()` / `useHasClientMpvBridge()` exported from `client-mpv.ts` for any future code that needs the same runtime probe.
+
 ## v3.8.19
 
 - ✨ Denshi + VideoCore: Client-side mpv playback for remote seanime servers

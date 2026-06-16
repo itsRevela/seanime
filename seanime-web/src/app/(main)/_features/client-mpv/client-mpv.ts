@@ -6,13 +6,47 @@ import {
 import { useServerHMACAuth, useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { clientIdAtom } from "@/app/websocket-provider"
 import { logger } from "@/lib/helpers/debug"
-import { __isElectronDesktop__ } from "@/types/constants"
 import { atom, useAtom, useAtomValue, useSetAtom } from "jotai"
 import { atomWithStorage } from "jotai/utils"
 import React from "react"
 import { toast } from "sonner"
 
 const log = logger("CLIENT MPV")
+
+// Runtime "are we inside Denshi?" probe. The build-time __isElectronDesktop__
+// constant flips on only when seanime-web is built with SEA_PUBLIC_DESKTOP
+// set, which the Docker-served bundle never has. Since Denshi loads its UI
+// from the remote seanime server (mainWindow.loadURL("http://server/"))
+// for users running Docker, the build-time flag is always false even
+// though the renderer IS inside Electron. The preload contextBridge
+// exposes `window.__isElectronDesktop__ === true` regardless of build
+// flavour, so prefer that when deciding whether Denshi-specific UI
+// should render. window.electron.mpv presence is the more precise
+// signal for the mpv bridge itself.
+function isInsideDenshi(): boolean {
+    if (typeof window === "undefined") return false
+    return window.__isElectronDesktop__ === true
+}
+
+function hasClientMpvBridge(): boolean {
+    if (typeof window === "undefined") return false
+    return !!window.electron?.mpv
+}
+
+// Hook variant of the above so React components can re-render once the
+// preload bridge is confirmed. Reads the value lazily through state so
+// SSR / static-renders don't crash on the window access.
+export function useIsInsideDenshi(): boolean {
+    const [v, setV] = React.useState<boolean>(false)
+    React.useEffect(() => { setV(isInsideDenshi()) }, [])
+    return v
+}
+
+export function useHasClientMpvBridge(): boolean {
+    const [v, setV] = React.useState<boolean>(false)
+    React.useEffect(() => { setV(hasClientMpvBridge()) }, [])
+    return v
+}
 
 // Detection result cached for the lifetime of the renderer process.
 // Denshi's main process caches its own detection too, so this call
@@ -78,10 +112,8 @@ export function useClientMpvAvailability(override?: string) {
     const effectiveOverride = override ?? storedOverride
 
     React.useEffect(() => {
-        if (!__isElectronDesktop__) return
-        if (typeof window === "undefined") return
-        const mpv = window.electron?.mpv
-        if (!mpv) return
+        if (!hasClientMpvBridge()) return
+        const mpv = window.electron!.mpv!
         let cancelled = false
         mpv.available(effectiveOverride || undefined)
             .then((res) => {
@@ -152,7 +184,7 @@ export function useLaunchClientMpv() {
     const { getHMACTokenQueryParam } = useServerHMACAuth()
 
     return React.useCallback(async (args: LaunchClientMpvArgs) => {
-        if (!__isElectronDesktop__ || !window.electron?.mpv) {
+        if (!hasClientMpvBridge()) {
             toast.error("Client mpv is only available in the desktop app")
             return { ok: false, error: "not in Denshi" }
         }
@@ -194,7 +226,7 @@ export function useLaunchClientMpv() {
         setActive(true)
         setState(null)
 
-        const result = await window.electron.mpv.launch({
+        const result = await window.electron!.mpv!.launch({
             url,
             title: args.fileTitle,
             savedPosition: args.savedPosition,
@@ -252,8 +284,8 @@ export function useClientMpvEventBridge() {
     const { mutate: cancelManualTracking } = usePlaybackCancelManualTracking({})
 
     React.useEffect(() => {
-        if (!__isElectronDesktop__) return
-        if (typeof window === "undefined" || !window.electron?.on) return
+        if (!isInsideDenshi()) return
+        if (!window.electron?.on) return
 
         const offState = window.electron.on("mpv:state", (s: ClientMpvState) => {
             setState(s)
@@ -326,7 +358,7 @@ export function useClientMpvContinuitySync() {
     const lastFlushedRef = React.useRef<{ time: number; flushedAt: number } | null>(null)
 
     React.useEffect(() => {
-        if (!__isElectronDesktop__) return
+        if (!isInsideDenshi()) return
         if (!active || !session) {
             lastFlushedRef.current = null
             return

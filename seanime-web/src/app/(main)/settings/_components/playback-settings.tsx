@@ -9,6 +9,7 @@ import {
     __clientMpv_extraArgsAtom,
     __clientMpv_pathOverrideAtom,
     useClientMpvAvailability,
+    useHasClientMpvBridge,
 } from "@/app/(main)/_features/client-mpv/client-mpv"
 import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { useMediastreamActiveOnDevice } from "@/app/(main)/mediastream/_lib/mediastream.atoms"
@@ -55,10 +56,16 @@ export function PlaybackSettings(props: PlaybackSettingsProps) {
     const setTab = useSetAtom(__settings_tabAtom)
 
     const usingNativePlayer = __isElectronDesktop__ && electronPlaybackMethod === ElectronPlaybackMethod.NativePlayer
-    const usingClientMpv = __isElectronDesktop__ && electronPlaybackMethod === ElectronPlaybackMethod.ClientMpv
+    // The mpv card uses a RUNTIME check (window.electron.mpv presence),
+    // not the build-time __isElectronDesktop__ constant — that constant
+    // is baked false in the Docker-served web bundle even when Denshi is
+    // the actual client (Denshi loads the UI from the remote server).
+    const hasClientMpvBridge = useHasClientMpvBridge()
+    const usingClientMpv = electronPlaybackMethod === ElectronPlaybackMethod.ClientMpv
 
     // Probe for mpv on the user's machine. Only meaningful inside
-    // Denshi — useClientMpvAvailability short-circuits in the web shell.
+    // Denshi — useClientMpvAvailability short-circuits when the bridge
+    // is absent.
     const clientMpvDetection = useClientMpvAvailability()
     const [clientMpvPathOverride, setClientMpvPathOverride] = useAtom(__clientMpv_pathOverrideAtom)
     const [clientMpvExtraArgs, setClientMpvExtraArgs] = useAtom(__clientMpv_extraArgsAtom)
@@ -122,48 +129,55 @@ export function PlaybackSettings(props: PlaybackSettingsProps) {
                                 />
                             </div>
                         </div>
+                    </div>
+                </SettingsCard>
+            )}
 
-                        {/*
-                         * Client-side mpv. Spawns mpv.exe on the user's
-                         * machine (via the Denshi main process), pointed at
-                         * the seanime file URL. Use this when the seanime
-                         * server runs on a remote/headless host where the
-                         * normal external-player flow can't reach a
-                         * display. Mutually exclusive with the built-in
-                         * player toggle above.
-                         */}
-                        <div className="flex items-start gap-4 pt-2 border-t border-gray-200 dark:border-gray-800">
-                            <div className="p-3 rounded-lg bg-gradient-to-br from-indigo-500/20 to-indigo-500/20 border border-indigo-500/20">
-                                <LuLaptop className="text-2xl text-indigo-600 dark:text-indigo-400" />
-                            </div>
-                            <div className="flex-1 space-y-3">
-                                <Switch
-                                    label="Use local mpv (on this device)"
-                                    help={clientMpvDetection.found
-                                        ? `Detected mpv at ${clientMpvDetection.path} (via ${clientMpvDetection.source}). Playback opens in mpv on this machine, streaming from the remote seanime server. Overrides downloaded-media / mediastream below.`
-                                        : "Spawns mpv.exe on this machine and streams from the seanime server. mpv is not currently detected — install it or set a custom path below."}
-                                    value={usingClientMpv}
-                                    onValueChange={v => {
-                                        setElectronPlaybackMethod(v ? ElectronPlaybackMethod.ClientMpv : ElectronPlaybackMethod.Default)
-                                        toast.success("Playback settings updated")
-                                    }}
+            {/*
+             * Client-side mpv. Lives in its own card because it must show
+             * up even when the seanime-web bundle was NOT built with the
+             * Denshi flag — Denshi running against a remote server loads
+             * the regular web bundle from that server, where
+             * __isElectronDesktop__ (build-time) is false. The runtime
+             * check via window.electron.mpv presence is the right gate
+             * here, regardless of which bundle is loaded.
+             */}
+            {hasClientMpvBridge && (
+                <SettingsCard
+                    title="Local mpv (Denshi)"
+                    className="border-2 border-dashed dark:border-gray-700 bg-gradient-to-r from-indigo-50/50 to-pink-50/50 dark:from-gray-900/20 dark:to-gray-900/20"
+                >
+                    <div className="flex items-start gap-4">
+                        <div className="p-3 rounded-lg bg-gradient-to-br from-indigo-500/20 to-indigo-500/20 border border-indigo-500/20">
+                            <LuLaptop className="text-2xl text-indigo-600 dark:text-indigo-400" />
+                        </div>
+                        <div className="flex-1 space-y-3">
+                            <Switch
+                                label="Use local mpv on this device"
+                                help={clientMpvDetection.found
+                                    ? `Detected mpv at ${clientMpvDetection.path} (via ${clientMpvDetection.source}). Playback opens in mpv on this machine, streaming from the remote seanime server. Overrides downloaded-media / mediastream below.`
+                                    : "Spawns mpv on this machine and streams from the seanime server. mpv is not currently detected — install it or set a custom path below."}
+                                value={usingClientMpv}
+                                onValueChange={v => {
+                                    setElectronPlaybackMethod(v ? ElectronPlaybackMethod.ClientMpv : ElectronPlaybackMethod.Default)
+                                    toast.success("Playback settings updated")
+                                }}
+                            />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                <TextInput
+                                    label="mpv path override"
+                                    placeholder="Auto-detect (PATH, then well-known install locations)"
+                                    value={clientMpvPathOverride}
+                                    onValueChange={setClientMpvPathOverride}
+                                    help="Full path to mpv.exe. Leave empty to auto-detect."
                                 />
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                    <TextInput
-                                        label="mpv path override"
-                                        placeholder="Auto-detect (PATH, then well-known install locations)"
-                                        value={clientMpvPathOverride}
-                                        onValueChange={setClientMpvPathOverride}
-                                        help="Full path to mpv.exe. Leave empty to auto-detect."
-                                    />
-                                    <TextInput
-                                        label="Extra mpv args"
-                                        placeholder="e.g. --hwdec=auto --vo=gpu-next"
-                                        value={clientMpvExtraArgs}
-                                        onValueChange={setClientMpvExtraArgs}
-                                        help="Appended verbatim to every mpv launch."
-                                    />
-                                </div>
+                                <TextInput
+                                    label="Extra mpv args"
+                                    placeholder="e.g. --hwdec=auto --vo=gpu-next"
+                                    value={clientMpvExtraArgs}
+                                    onValueChange={setClientMpvExtraArgs}
+                                    help="Appended verbatim to every mpv launch."
+                                />
                             </div>
                         </div>
                     </div>

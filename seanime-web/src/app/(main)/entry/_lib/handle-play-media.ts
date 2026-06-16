@@ -123,7 +123,13 @@ export function useHandlePlayMedia() {
         // event bridge (in client-mpv.ts) will trigger sync-current-progress
         // when mpv exits after watching to the end.
         //
-        if (__isElectronDesktop__ && (
+        // Runtime check (not build-time __isElectronDesktop__): the
+        // web bundle Denshi loads from a remote seanime server doesn't
+        // have the build-time flag set, but window.electron.mpv is
+        // still injected by the preload at runtime. Use that as the
+        // gate so this branch fires when a real Denshi is around.
+        const hasMpvBridge = typeof window !== "undefined" && !!window.electron?.mpv
+        if (hasMpvBridge && (
             (!forcePlaybackMethod && electronPlaybackMethod === ElectronPlaybackMethod.ClientMpv) ||
             (forcePlaybackMethod && forcePlaybackMethod === "clientmpv")
         )) {
