@@ -7,6 +7,12 @@ import { PiVideoFill } from "react-icons/pi"
 
 export const enum ElectronPlaybackMethod {
     NativePlayer = "nativePlayer", // Desktop media player or Integrated player (media streaming)
+    // Launch mpv on the user's Windows/desktop machine via Denshi's
+    // child_process bridge and stream the file from the seanime server
+    // over HTTP. Made for users running Denshi against a remote/headless
+    // seanime server (Unraid, Docker) where the existing server-side mpv
+    // module has no display to render onto.
+    ClientMpv = "clientMpv",
     Default = "default", // Desktop media player, media streaming or external player link
 }
 

@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.19
+
+- ✨ Denshi + VideoCore: Client-side mpv playback for remote seanime servers
+  - The existing mpv integration spawns mpv on whatever box runs the Go server, which is useless when the server lives on a headless Unraid / Docker host — there's no display to render onto. This release adds a second mpv path that lets Denshi spawn `mpv.exe` on the user's actual desktop while playback is still driven from the same seanime UI and synced through the existing AniList progress flow.
+  - **Denshi:** new `seanime-denshi/src/mpv-client.js` module owns the mpv lifecycle: auto-detects the binary (`PATH` first, then chocolatey / standard Windows installs / `/usr/local/bin` on POSIX), spawns mpv with `--input-ipc-server`, connects to the named pipe (Windows) / Unix socket (other OSes), and parses mpv's newline-delimited JSON-IPC into structured state. Six new IPC handlers in `main.js` (`client-mpv:available` / `launch` / `kill` / `command` / `seek` / `setProperty`) bridge it to the renderer, plus an `app.on("before-quit")` cleanup so a stray mpv doesn't outlive Denshi. Preload exposes the API as `window.electron.mpv`.
+  - **Frontend:** new `ClientMpv` value on the existing `ElectronPlaybackMethod` enum so users pick it once in playback settings and every play button routes through it. `handle-play-media.ts` dispatches to `useLaunchClientMpv` ahead of the native-player branch when selected, builds a `/api/v1/mediastream/file?path=...` URL with HMAC auth when the server has a password, and reuses the existing `usePlaybackStartManualTracking` hook so the AniList sync flow targets the right media. The `useClientMpvEventBridge` listens on the IPC events, auto-fires `syncCurrentProgress` when mpv exits past the 80 % completion threshold (or with a natural EOF), and cancels manual tracking otherwise. `useClientMpvContinuitySync` flushes the current time-pos to the Continuity store every 10 s so "resume where you left off" works on the next launch.
+  - **Settings UI:** a second card in the Denshi section of Playback Settings exposes "Use local mpv (on this device)", live binary-detection status, an `mpv path override`, and an `Extra mpv args` field for things like `--hwdec=auto --vo=gpu-next`. Both override and extra-args persist per-device in localStorage.
+  - Notes on what's intentionally NOT in this pass: aniskip-driven automatic intro skip (mpv's native chapter keys still work), per-track subtitle / audio selection persistence (mpv reads embedded tracks from the MKV directly), and a custom playback HUD inside the seanime UI while mpv plays.
+
 ## v3.8.18
 
 - 🦺 VideoCore: Raised hls.js fragment-load timeouts to survive long-segment encodes

@@ -5,6 +5,11 @@ import {
     useCurrentDevicePlaybackSettings,
     useExternalPlayerLink,
 } from "@/app/(main)/_atoms/playback.atoms"
+import {
+    __clientMpv_extraArgsAtom,
+    __clientMpv_pathOverrideAtom,
+    useClientMpvAvailability,
+} from "@/app/(main)/_features/client-mpv/client-mpv"
 import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { useMediastreamActiveOnDevice } from "@/app/(main)/mediastream/_lib/mediastream.atoms"
 import { SettingsCard, SettingsPageHeader } from "@/app/(main)/settings/_components/settings-card"
@@ -13,8 +18,9 @@ import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/components/ui/core/styling"
 import { Switch } from "@/components/ui/switch"
+import { TextInput } from "@/components/ui/text-input"
 import { __isElectronDesktop__ } from "@/types/constants"
-import { useSetAtom } from "jotai"
+import { useAtom, useSetAtom } from "jotai"
 import React from "react"
 import { BiDesktop } from "react-icons/bi"
 import { LuCirclePlay, LuClapperboard, LuExternalLink, LuLaptop } from "react-icons/lu"
@@ -49,6 +55,13 @@ export function PlaybackSettings(props: PlaybackSettingsProps) {
     const setTab = useSetAtom(__settings_tabAtom)
 
     const usingNativePlayer = __isElectronDesktop__ && electronPlaybackMethod === ElectronPlaybackMethod.NativePlayer
+    const usingClientMpv = __isElectronDesktop__ && electronPlaybackMethod === ElectronPlaybackMethod.ClientMpv
+
+    // Probe for mpv on the user's machine. Only meaningful inside
+    // Denshi — useClientMpvAvailability short-circuits in the web shell.
+    const clientMpvDetection = useClientMpvAvailability()
+    const [clientMpvPathOverride, setClientMpvPathOverride] = useAtom(__clientMpv_pathOverrideAtom)
+    const [clientMpvExtraArgs, setClientMpvExtraArgs] = useAtom(__clientMpv_extraArgsAtom)
 
     return (
         <>
@@ -107,6 +120,50 @@ export function PlaybackSettings(props: PlaybackSettingsProps) {
                                         toast.success("Playback settings updated")
                                     }}
                                 />
+                            </div>
+                        </div>
+
+                        {/*
+                         * Client-side mpv. Spawns mpv.exe on the user's
+                         * machine (via the Denshi main process), pointed at
+                         * the seanime file URL. Use this when the seanime
+                         * server runs on a remote/headless host where the
+                         * normal external-player flow can't reach a
+                         * display. Mutually exclusive with the built-in
+                         * player toggle above.
+                         */}
+                        <div className="flex items-start gap-4 pt-2 border-t border-gray-200 dark:border-gray-800">
+                            <div className="p-3 rounded-lg bg-gradient-to-br from-indigo-500/20 to-indigo-500/20 border border-indigo-500/20">
+                                <LuLaptop className="text-2xl text-indigo-600 dark:text-indigo-400" />
+                            </div>
+                            <div className="flex-1 space-y-3">
+                                <Switch
+                                    label="Use local mpv (on this device)"
+                                    help={clientMpvDetection.found
+                                        ? `Detected mpv at ${clientMpvDetection.path} (via ${clientMpvDetection.source}). Playback opens in mpv on this machine, streaming from the remote seanime server. Overrides downloaded-media / mediastream below.`
+                                        : "Spawns mpv.exe on this machine and streams from the seanime server. mpv is not currently detected — install it or set a custom path below."}
+                                    value={usingClientMpv}
+                                    onValueChange={v => {
+                                        setElectronPlaybackMethod(v ? ElectronPlaybackMethod.ClientMpv : ElectronPlaybackMethod.Default)
+                                        toast.success("Playback settings updated")
+                                    }}
+                                />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <TextInput
+                                        label="mpv path override"
+                                        placeholder="Auto-detect (PATH, then well-known install locations)"
+                                        value={clientMpvPathOverride}
+                                        onValueChange={setClientMpvPathOverride}
+                                        help="Full path to mpv.exe. Leave empty to auto-detect."
+                                    />
+                                    <TextInput
+                                        label="Extra mpv args"
+                                        placeholder="e.g. --hwdec=auto --vo=gpu-next"
+                                        value={clientMpvExtraArgs}
+                                        onValueChange={setClientMpvExtraArgs}
+                                        help="Appended verbatim to every mpv launch."
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>

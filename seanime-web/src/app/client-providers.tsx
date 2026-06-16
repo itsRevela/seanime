@@ -1,4 +1,9 @@
 import { serverAuthTokenAtom, serverStatusAtom } from "@/app/(main)/_atoms/server-status.atoms"
+import {
+    useClientMpvAvailability,
+    useClientMpvContinuitySync,
+    useClientMpvEventBridge,
+} from "@/app/(main)/_features/client-mpv/client-mpv"
 import { WebsocketProvider } from "@/app/websocket-provider"
 import { CustomCSSProvider } from "@/components/shared/custom-css-provider"
 import { CustomThemeProvider } from "@/components/shared/custom-theme-provider"
@@ -10,6 +15,18 @@ import { Provider as JotaiProvider } from "jotai/react"
 import { ThemeProvider } from "next-themes"
 import React from "react"
 import { CookiesProvider } from "react-cookie"
+
+// Wraps the renderer-side client-mpv hooks so they mount once per app
+// lifetime (inside the Jotai provider). Both no-op outside Denshi, so
+// it's safe to include unconditionally — keeps the wiring colocated
+// with the rest of the global state setup rather than scattered into
+// the layout tree.
+function ClientMpvProviders() {
+    useClientMpvAvailability()
+    useClientMpvEventBridge()
+    useClientMpvContinuitySync()
+    return null
+}
 
 interface ClientProvidersProps {
     children?: React.ReactNode
@@ -40,6 +57,7 @@ export const ClientProviders: React.FC<ClientProvidersProps> = ({ children }) =>
                 <JotaiProvider store={store}>
                     <QueryClientProvider client={queryClient}>
                         <WebsocketProvider>
+                            <ClientMpvProviders />
                             {children}
                             <CustomThemeProvider />
                             <Toaster />

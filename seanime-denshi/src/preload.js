@@ -54,6 +54,12 @@ contextBridge.exposeInMainWorld(
                 "cast:mediaStatus",
                 "cast:receiverReady",
                 "cast:error",
+                // Client-side mpv playback events (renderer <- main):
+                //   mpv:state — coalesced snapshot of timePos / duration /
+                //               paused / eofReached / tracks (~1Hz)
+                //   mpv:exited — process exited (code, completedNaturally)
+                "mpv:state",
+                "mpv:exited",
             ]
             if (validChannels.includes(channel)) {
                 // Remove the event listener to avoid memory leaks
@@ -111,6 +117,21 @@ contextBridge.exposeInMainWorld(
         denshiSettings: {
             get: () => ipcRenderer.invoke("denshi:getSettings"),
             set: (settings) => ipcRenderer.invoke("denshi:setSettings", settings),
+        },
+
+        // Client-side mpv (Denshi spawns mpv on the user's machine and
+        // bridges its JSON-IPC pipe through the main process; see
+        // mpv-client.js + the "client-mpv:*" handlers in main.js).
+        // available() returns { found, path, source } — call once at
+        // app boot so the renderer knows whether to show a "Play with
+        // mpv" button at all.
+        mpv: {
+            available: (override) => ipcRenderer.invoke("client-mpv:available", override),
+            launch: (opts) => ipcRenderer.invoke("client-mpv:launch", opts),
+            kill: () => ipcRenderer.invoke("client-mpv:kill"),
+            command: (cmd) => ipcRenderer.invoke("client-mpv:command", cmd),
+            seek: (time, mode) => ipcRenderer.invoke("client-mpv:seek", { time, mode }),
+            setProperty: (name, value) => ipcRenderer.invoke("client-mpv:setProperty", { name, value }),
         },
 
         // Chromecast

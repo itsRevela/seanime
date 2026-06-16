@@ -10,6 +10,7 @@ import("strip-ansi").then(module => {
 const { autoUpdater } = require("electron-updater")
 const log = require("electron-log/main")
 log.initialize()
+const mpvClient = require("./mpv-client")
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Settings
@@ -1570,6 +1571,102 @@ app.whenReady().then(async () => {
         if (win && !win.isDestroyed()) {
             win.close()
         }
+    })
+
+    //
+    // Client-side mpv handlers
+    //
+    // Denshi spawns mpv on the user's actual desktop machine and bridges
+    // its JSON-IPC pipe back to the renderer over Electron IPC, so playback
+    // works when the seanime backend runs on a remote/headless host (the
+    // server-side mpv module can't help in that topology). See mpv-client.js
+    // for the lifecycle / pipe handling. The renderer subscribes to
+    // "mpv:state" / "mpv:exited" via the preload bridge.
+
+    function sendMpvEvent(channel, payload) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send(channel, payload)
+        }
+    }
+
+    ipcMain.handle("client-mpv:available", async (_, override) => {
+        try {
+            const det = mpvClient.detectMpvPath(override)
+            return { found: det.found, path: det.path, source: det.source }
+        } catch (err) {
+            log.warn(`[client-mpv:available] ${err.message}`)
+            return { found: false, path: null, source: null, error: err.message }
+        }
+    })
+
+    ipcMain.handle("client-mpv:launch", async (_, opts = {}) => {
+        try {
+            const result = await mpvClient.launchMpv({
+                url: opts.url,
+                title: opts.title,
+                savedPosition: opts.savedPosition,
+                externalSubtitles: opts.externalSubtitles,
+                mpvArgs: opts.mpvArgs,
+                mpvPathOverride: opts.mpvPath,
+                onState: (state) => sendMpvEvent("mpv:state", state),
+                onExited: (info) => sendMpvEvent("mpv:exited", info),
+                onLog: (level, message) => {
+                    // Forward stdout/stderr/info to electron-log so users
+                    // can diagnose mpv failures via the standard log files.
+                    if (level === "error" || level === "stderr") log.warn(`[client-mpv] ${message.toString().trim()}`)
+                    else if (level === "warn") log.warn(`[client-mpv] ${message.toString().trim()}`)
+                    else log.info(`[client-mpv] ${message.toString().trim()}`)
+                },
+            })
+            return { ok: true, ipcPath: result.ipcPath, mpvPath: result.mpvPath }
+        } catch (err) {
+            log.error(`[client-mpv:launch] ${err.message}`)
+            return { ok: false, error: err.message }
+        }
+    })
+
+    ipcMain.handle("client-mpv:kill", async () => {
+        const killed = mpvClient.killActive()
+        return { ok: true, killed }
+    })
+
+    ipcMain.handle("client-mpv:command", async (_, command) => {
+        const session = mpvClient.getActiveSession()
+        if (!session) return { ok: false, error: "no active mpv session" }
+        try {
+            const data = await session.runCommand(command)
+            return { ok: true, data }
+        } catch (err) {
+            return { ok: false, error: err.message }
+        }
+    })
+
+    ipcMain.handle("client-mpv:seek", async (_, args = {}) => {
+        const session = mpvClient.getActiveSession()
+        if (!session) return { ok: false, error: "no active mpv session" }
+        try {
+            await session.seek(args.time, args.mode)
+            return { ok: true }
+        } catch (err) {
+            return { ok: false, error: err.message }
+        }
+    })
+
+    ipcMain.handle("client-mpv:setProperty", async (_, args = {}) => {
+        const session = mpvClient.getActiveSession()
+        if (!session) return { ok: false, error: "no active mpv session" }
+        try {
+            const data = await session.setProperty(args.name, args.value)
+            return { ok: true, data }
+        } catch (err) {
+            return { ok: false, error: err.message }
+        }
+    })
+
+    // Make sure a stray mpv doesn't outlive Denshi. before-quit fires on
+    // user quit AND on auto-restart, so this also catches relaunches.
+    app.on("before-quit", () => {
+        try { mpvClient.killActive() } catch {}
     })
 
     // Launch server

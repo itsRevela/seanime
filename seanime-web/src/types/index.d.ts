@@ -96,9 +96,60 @@ declare global {
                 disableSubtitles: () => Promise<void>;
                 getLanIP: () => Promise<string>;
             };
+            // Client-side mpv (Denshi spawns mpv.exe locally, bridges its
+            // JSON-IPC pipe to the renderer). Used to make mpv playback
+            // work when the seanime server runs on a remote host (Unraid /
+            // Docker) where the existing server-side mpv module has no
+            // display to render onto. See seanime-denshi/src/mpv-client.js.
+            mpv?: {
+                available: (override?: string) => Promise<{ found: boolean; path: string | null; source: string | null; error?: string }>;
+                launch: (opts: ClientMpvLaunchOptions) => Promise<{ ok: boolean; ipcPath?: string; mpvPath?: string; error?: string }>;
+                kill: () => Promise<{ ok: boolean; killed: boolean }>;
+                command: (cmd: any[]) => Promise<{ ok: boolean; data?: any; error?: string }>;
+                seek: (time: number, mode?: "absolute" | "relative" | "absolute-percent") => Promise<{ ok: boolean; error?: string }>;
+                setProperty: (name: string, value: any) => Promise<{ ok: boolean; data?: any; error?: string }>;
+            };
         };
 
         __isElectronDesktop__?: boolean;
+    }
+
+    interface ClientMpvLaunchOptions {
+        // HTTP URL mpv should open. Built by the renderer from the seanime
+        // /api/v1/mediastream/file?path=... endpoint plus an HMAC token
+        // when the server has a password configured.
+        url: string;
+        // Forced media title shown in mpv's window / OSD. Usually the
+        // anime title + episode number so the user can tell which file
+        // they're on at a glance.
+        title?: string;
+        // Resume position in seconds (server's last-known progress for
+        // this episode). mpv jumps here on start; skipped when < ~5s.
+        savedPosition?: number;
+        // External subtitle files to pre-attach (server-extracted .ass
+        // files etc). Each entry: { url, title?, lang? }.
+        externalSubtitles?: Array<{ url: string; title?: string; lang?: string }>;
+        // Extra mpv args appended verbatim. From settings.
+        mpvArgs?: string;
+        // Override path to mpv.exe; falls back to PATH / well-known
+        // locations when unset.
+        mpvPath?: string;
+    }
+
+    interface ClientMpvState {
+        timePos: number;
+        duration: number;
+        paused: boolean;
+        eofReached: boolean;
+        mediaTitle: string | null;
+        tracks: any[];
+    }
+
+    interface ClientMpvExitedInfo {
+        code: number;
+        signal?: string;
+        error?: string;
+        completedNaturally: boolean;
     }
 
     interface CastDevice {
