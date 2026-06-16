@@ -24,7 +24,10 @@ const { spawn } = require("child_process")
 const net = require("net")
 const fs = require("fs")
 const path = require("path")
-const log = require("electron-log").default || require("electron-log")
+// electron-log v5 splits into main/renderer entry points; use the main
+// variant explicitly to match the rest of Denshi (main.js loads
+// "electron-log/main").
+const log = require("electron-log/main")
 
 // Where Windows users typically install mpv. We pick the first that
 // exists; PATH lookup ("mpv") is tried before any of these so PATH wins
