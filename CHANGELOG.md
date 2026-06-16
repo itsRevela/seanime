@@ -2,9 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v3.8.18
 
-- 🦺 Denshi: Disable Electron auto-updates in this fork
+- 🦺 VideoCore: Raised hls.js fragment-load timeouts to survive long-segment encodes
+  - Seanime's HLS pipeline cuts segments on the source's video keyframes. Some encodes (x265 BD rips like `[Anime Time] Attack on Titan` 10-bit) use very sparse keyframes — keyframe gaps of 80-120 seconds during static scenes are routine — which means a single transcoded `.ts` segment carries that full keyframe interval of video. On entry-level GPUs (GTX 960 NVDEC HEVC-10bit → NVENC H.264) that's well over the 10 s `maxTimeToFirstByteMs` default in hls.js: every request to `segment-0.ts` aborts before any bytes arrive, hls.js retries on the same broken budget, the buffer drains to ~0 s, video freezes while the audio pipeline (cheap, separate ffmpeg) keeps cruising. Classic "audio plays, video freezes".
+  - The hls.js client now uses a `fragLoadPolicy` with `maxTimeToFirstByteMs: 75_000` and `maxLoadTimeMs: 180_000`. Worst-case server-side encode of a ~120 s segment on a slow GPU finishes inside the new budget; real network stalls still surface, just after a longer wait. Retry counts are kept at hls.js defaults.
+  - This is a frontend-only workaround. The underlying server-side fix (cap segment duration by injecting synthetic cut points / force_key_frames when the next real keyframe is too far away) is queued as a follow-up; doing that properly touches the segment-cutting code in `internal/mediastream/cassette/pipeline.go` and the playlist generator.
+- 🦺 Denshi: Disable Electron auto-updates in this fork (carried over from earlier commit)
   - `seanime-denshi/src/main.js` previously set `autoUpdater.autoDownload = true`, `autoUpdater.autoInstallOnAppQuit = true`, and ran `autoUpdater.checkForUpdatesAndNotify()` once per launch — none of which were gated by the in-app "Do not check for updates" toggle (the help text on that toggle explicitly says so). The result was that a Denshi install would silently pull a newer signed build from the configured update channel and swap itself in on next quit, undoing any local patches.
   - All three are now neutralized at the source. The `check-for-updates` IPC handler still works, so a manual check from the UI is possible; nothing happens automatically.
 

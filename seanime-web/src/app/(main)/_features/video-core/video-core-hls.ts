@@ -109,6 +109,40 @@ export function useVideoCoreHls({
                 backBufferLength: 90,
                 enableWebVTT: true,
                 renderTextTracksNatively: false, // don't use native text tracks for subtitles
+                // Bump the per-fragment load policy way past hls.js's 10-20s
+                // defaults. Seanime's HLS pipeline cuts segments on the
+                // source's video keyframes. Some encodes (x265 BD rips with
+                // adaptive scenecut, for example) emit keyframe gaps measured
+                // in minutes during static scenes, which means a single .ts
+                // segment can be 80-120 seconds of video that the server's
+                // ffmpeg has to produce on demand. With NVENC on entry-level
+                // GPUs that's well over 10s of wall time and the default
+                // maxTimeToFirstByteMs would fire before any bytes arrive,
+                // surfacing as fragLoadTimeOut + bufferStalledError and a
+                // frozen picture with audio still rolling.
+                fragLoadPolicy: {
+                    default: {
+                        // ~75s budget to first byte covers a worst-case
+                        // ~120s segment encoded on a GTX 960 (HEVC10 -> H.264);
+                        // realtime encoders on faster GPUs finish far quicker
+                        // and the timeout never fires.
+                        maxTimeToFirstByteMs: 75000,
+                        // Once bytes start flowing, give the whole segment
+                        // 3 minutes to land — large segments can still take a
+                        // few seconds to ship after encode completes.
+                        maxLoadTimeMs: 180000,
+                        timeoutRetry: {
+                            maxNumRetry: 4,
+                            retryDelayMs: 0,
+                            maxRetryDelayMs: 0,
+                        },
+                        errorRetry: {
+                            maxNumRetry: 6,
+                            retryDelayMs: 1000,
+                            maxRetryDelayMs: 8000,
+                        },
+                    },
+                },
             })
 
             hlsRef.current = hls
