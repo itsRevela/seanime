@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.23
+
+- 🐛 Denshi: Stop the playlist-pos initial-observe event from clobbering the launch title
+  - v3.8.22 added an IPC `set_property force-media-title` push on every `playlist-pos` change so the window title and OSC label could follow the current episode after `<` / `>`. But the `MpvSession` constructor initialized `this.currentPlaylistIndex` to `playlistStartIndex` (e.g. 11 for episode 12 of 13), while mpv's actual `playlist-pos` at launch is 0 — it only has one file in the playlist until `populatePlaylist()` runs. mpv emits the current value of any property when `observe_property` is first set up, so the playlist-pos observer immediately fired with `msg.data=0`, the handler saw `0 !== 11` and treated it as a navigation event, and set `force-media-title` to `playlist[0].fileTitle` ("Episode 1"). The user-visible symptom was clicking episode 12 and seeing the OSC label say "Episode 2 / Episode 4" because subsequent inserts kept racing against that initial wrong write.
+  - Fixed by initializing `this.currentPlaylistIndex = 0` so it matches mpv's actual launch state. `populatePlaylist()`'s `++` increments still march the value up to `playlistStartIndex` as inserts shift the currently-playing item forward, so by the time population finishes our tracker and mpv's `playlist-pos` agree and real navigation events fire correctly.
+
 ## v3.8.22
 
 - 🐛 Denshi: Refresh mpv's window title + OSC "now playing" label when the playlist advances

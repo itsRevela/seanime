@@ -122,12 +122,24 @@ class MpvSession {
         this.playlistStartIndex = typeof playlistStartIndex === "number" && playlistStartIndex >= 0
             ? playlistStartIndex
             : 0
-        // Current playlist position (0-based) in mpv's view. Updated when
-        // the playlist-pos property changes. Starts at playlistStartIndex
-        // because that's the item we launched with after the insert/append
-        // dance below; mpv will report this back to us once observers are
-        // installed.
-        this.currentPlaylistIndex = this.playlistStartIndex
+        // Current playlist position (0-based) in mpv's view. Starts at
+        // 0 because mpv launches with a single-item playlist (just
+        // opts.url) — so mpv's own playlist-pos really is 0 at this
+        // point, not playlistStartIndex. populatePlaylist() increments
+        // this every time it inserts an item at position 0, mirroring
+        // the way mpv shifts the currently-playing item's index
+        // forward. By the time populate finishes, this matches mpv's
+        // reported playlist-pos (= playlistStartIndex).
+        //
+        // Initializing this to playlistStartIndex would make the very
+        // first property-change event from observe_property (which
+        // fires with playlist-pos=0 right after registration) look like
+        // a navigation event, and the handler would call
+        // setProperty("force-media-title", playlist[0].fileTitle) —
+        // i.e. force the window/OSC title to "Episode 1" before any
+        // real navigation happened. That's the bug that made clicking
+        // ep12 of Elfen Lied show "Episode 2 / 4" on launch.
+        this.currentPlaylistIndex = 0
         this.onState = onState || (() => {})
         this.onExited = onExited || (() => {})
         this.onPlaylistChanged = onPlaylistChanged || (() => {})
