@@ -172,7 +172,15 @@ class MpvSession {
         ]
         if (this.title) {
             args.push(`--force-media-title=${this.title}`)
-            args.push(`--title=${this.title} - mpv (seanime)`)
+            // Use mpv's property expansion in the window title so it
+            // follows media-title automatically. We update
+            // force-media-title via IPC when the playlist advances
+            // (see the playlist-pos handler in handleIpcMessage); this
+            // template ensures the OS window title picks that up too.
+            // The literal "${media-title}" must be preserved verbatim
+            // for mpv to expand — use a regular string, not a JS
+            // template literal.
+            args.push("--title=${media-title} - mpv (seanime)")
         }
         if (this.savedPosition !== null && this.savedPosition > 5) {
             // mpv accepts --start=<seconds>. Skip the resume if it's very
@@ -324,6 +332,19 @@ class MpvSession {
                         const prev = this.currentPlaylistIndex
                         this.currentPlaylistIndex = msg.data
                         const item = this.playlist[msg.data] || null
+                        // Push the new episode's title into mpv so the
+                        // window title (via the ${media-title} template
+                        // in --title) and the OSC's "currently playing"
+                        // label both reflect the now-playing item
+                        // instead of staying stuck on whatever we
+                        // launched with. force-media-title is sticky
+                        // for the session, so it has to be explicitly
+                        // rewritten every time we advance.
+                        if (item && item.fileTitle) {
+                            this.setProperty("force-media-title", item.fileTitle).catch((err) => {
+                                this.onLog("warn", `failed to update force-media-title: ${err.message}`)
+                            })
+                        }
                         this.onPlaylistChanged({
                             from: prev,
                             to: msg.data,

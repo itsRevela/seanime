@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.22
+
+- 🐛 Denshi: Refresh mpv's window title + OSC "now playing" label when the playlist advances
+  - The v3.8.21 playlist wiring populated mpv's playlist correctly so `<` / `>` could navigate between episodes, but the on-screen labels stayed stuck on the launch episode. `--title=` was passed as a literal string at process start (e.g. `"Episode 12 - mpv (seanime)"`), and `--force-media-title=` was set as a CLI arg, which mpv treats as sticky for the rest of the session. Result: window title and OSC playlist-position indicator never refreshed when the user (or auto-advance) moved to a different item.
+  - `seanime-denshi/src/mpv-client.js` now passes `--title=${media-title} - mpv (seanime)` so the window title follows mpv's `media-title` property automatically (uses mpv's property expansion). When the `playlist-pos` observer fires we additionally push `set_property force-media-title <new-fileTitle>` over IPC, so both the OSD label and the property template re-render against the now-playing episode.
+  - Denshi-only fix; no server / web-bundle changes needed.
+
 ## v3.8.21
 
 - ✨ Denshi + VideoCore: Wire mpv's playlist with surrounding episodes so `<` / `>` and OSC next/prev buttons work
