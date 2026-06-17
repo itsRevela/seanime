@@ -58,8 +58,12 @@ contextBridge.exposeInMainWorld(
                 //   mpv:state — coalesced snapshot of timePos / duration /
                 //               paused / eofReached / tracks (~1Hz)
                 //   mpv:exited — process exited (code, completedNaturally)
+                //   mpv:playlist-changed — mpv moved to a different
+                //               playlist item (auto-advance, user hit
+                //               < or >, etc). Payload: { from, to, item }.
                 "mpv:state",
                 "mpv:exited",
+                "mpv:playlist-changed",
             ]
             if (validChannels.includes(channel)) {
                 // Remove the event listener to avoid memory leaks

@@ -1,6 +1,7 @@
 import { useUpdateContinuityWatchHistoryItem } from "@/api/hooks/continuity.hooks"
 import {
     usePlaybackCancelManualTracking,
+    usePlaybackStartManualTracking,
     usePlaybackSyncCurrentProgress,
 } from "@/api/hooks/playback_manager.hooks"
 import { useServerHMACAuth, useServerStatus } from "@/app/(main)/_hooks/use-server-status"
@@ -158,6 +159,13 @@ export function useIsClientMpvReady(): boolean {
     return !!detection.found
 }
 
+export type LaunchClientMpvSiblingEpisode = {
+    mediaId: number
+    episodeNumber: number
+    filePath: string
+    fileTitle: string
+}
+
 export type LaunchClientMpvArgs = {
     mediaId: number
     episodeNumber: number
@@ -165,6 +173,12 @@ export type LaunchClientMpvArgs = {
     fileTitle: string
     savedPosition?: number
     externalSubtitles?: Array<{ url: string; title?: string; lang?: string }>
+    // Sibling episodes to push into mpv's playlist alongside the
+    // current one. The caller provides previous + next as a single
+    // ordered array; the launcher computes the starting index from
+    // whichever entry matches `filePath`. Allows mpv's < / > buttons
+    // and OSC next/prev to navigate the surrounding episodes.
+    siblingEpisodes?: LaunchClientMpvSiblingEpisode[]
 }
 
 // Hook: returns an async function that launches mpv for an episode.
@@ -193,25 +207,63 @@ export function useLaunchClientMpv() {
             return { ok: false, error: "mpv not found" }
         }
 
-        // Build the file URL on the seanime server. The mediastream file
-        // endpoint serves the raw MKV with HTTP range support; mpv loves
-        // that. The path is passed as a query param (not base64-encoded,
-        // unlike the nakama equivalent, because the server's
-        // ServeEchoFile already URL-decodes it).
-        const base = serverStatus?.serverHasPassword
-            ? window.location.origin // we'll attach HMAC via query
-            : window.location.origin
-        const encodedPath = encodeURIComponent(args.filePath)
-        let url = `${base}/api/v1/mediastream/file?path=${encodedPath}&client=${encodeURIComponent(clientId ?? "")}`
-        if (serverStatus?.serverHasPassword) {
-            // HMAC tokens are scoped to the endpoint path, not the query
-            // string. The "&" symbol tells getHMACTokenQueryParam to
-            // prepend with & since we already have ?path=...
-            const token = await getHMACTokenQueryParam("/api/v1/mediastream/file", "&")
-            url += token
+        // Helper: build a /mediastream/file URL for a given server path.
+        // Each call attaches its own HMAC token (the server scopes tokens
+        // per endpoint, not per request, so siblings can share the call
+        // but we await each one to keep the code path uniform).
+        const buildFileUrl = async (filePath: string): Promise<string> => {
+            const encodedPath = encodeURIComponent(filePath)
+            let url = `${window.location.origin}/api/v1/mediastream/file?path=${encodedPath}&client=${encodeURIComponent(clientId ?? "")}`
+            if (serverStatus?.serverHasPassword) {
+                // HMAC tokens are scoped to the endpoint path, not the
+                // query string. The "&" symbol tells getHMACTokenQueryParam
+                // to prepend with & since we already have ?path=...
+                const token = await getHMACTokenQueryParam("/api/v1/mediastream/file", "&")
+                url += token
+            }
+            return url
         }
 
+        const url = await buildFileUrl(args.filePath)
         log.info("Launching mpv with URL", url)
+
+        // Build the sibling playlist (if provided). We place the current
+        // episode and all siblings in episodeNumber order so mpv's
+        // < / > navigation feels intuitive. playlistStartIndex points
+        // at the entry matching args.filePath (the one we passed to
+        // mpv on the command line); previous siblings get insert-at 0'd
+        // before it, later siblings get appended after.
+        type BuiltPlaylistItem = { url: string; mediaId: number; episodeNumber: number; filePath: string; fileTitle: string }
+        let playlist: BuiltPlaylistItem[] | undefined
+        let playlistStartIndex: number | undefined
+        if (args.siblingEpisodes && args.siblingEpisodes.length > 0) {
+            const merged = [
+                {
+                    mediaId: args.mediaId,
+                    episodeNumber: args.episodeNumber,
+                    filePath: args.filePath,
+                    fileTitle: args.fileTitle,
+                },
+                ...args.siblingEpisodes,
+            ]
+                .filter((it) => !!it.filePath)
+                // Dedupe by filePath in case the caller accidentally
+                // included the current episode in siblingEpisodes too.
+                .filter((it, idx, arr) => arr.findIndex((other) => other.filePath === it.filePath) === idx)
+                .sort((a, b) => a.episodeNumber - b.episodeNumber)
+
+            const built = await Promise.all(merged.map(async (item) => ({
+                url: item.filePath === args.filePath ? url : await buildFileUrl(item.filePath),
+                mediaId: item.mediaId,
+                episodeNumber: item.episodeNumber,
+                filePath: item.filePath,
+                fileTitle: item.fileTitle,
+            })))
+            playlist = built
+            playlistStartIndex = built.findIndex((it) => it.filePath === args.filePath)
+            if (playlistStartIndex < 0) playlistStartIndex = 0
+            log.info(`Built mpv playlist with ${built.length} items, starting at index ${playlistStartIndex}`)
+        }
 
         // Optimistically mark active so the UI can update before the IPC
         // round-trip completes. We'll clear it if launch fails below.
@@ -233,6 +285,8 @@ export function useLaunchClientMpv() {
             externalSubtitles: args.externalSubtitles,
             mpvArgs: extraArgs || undefined,
             mpvPath: override || undefined,
+            playlist,
+            playlistStartIndex,
         })
 
         if (!result.ok) {
@@ -270,6 +324,7 @@ export function useClientMpvEventBridge() {
     const setActive = useSetAtom(__clientMpv_activeAtom)
     const [session, setSession] = useAtom(__clientMpv_sessionAtom)
     const state = useAtomValue(__clientMpv_stateAtom)
+    const clientId = useAtomValue(clientIdAtom)
 
     // Hold the live session/state in refs so the IPC callbacks (which
     // are registered once on mount) can read the latest values without
@@ -277,11 +332,14 @@ export function useClientMpvEventBridge() {
     // the IPC listener and lose events.
     const sessionRef = React.useRef(session)
     const stateRef = React.useRef(state)
+    const clientIdRef = React.useRef(clientId)
     React.useEffect(() => { sessionRef.current = session }, [session])
     React.useEffect(() => { stateRef.current = state }, [state])
+    React.useEffect(() => { clientIdRef.current = clientId }, [clientId])
 
     const { mutate: syncProgress } = usePlaybackSyncCurrentProgress()
     const { mutate: cancelManualTracking } = usePlaybackCancelManualTracking({})
+    const { mutate: startManualTracking } = usePlaybackStartManualTracking()
 
     React.useEffect(() => {
         if (!isInsideDenshi()) return
@@ -289,6 +347,58 @@ export function useClientMpvEventBridge() {
 
         const offState = window.electron.on("mpv:state", (s: ClientMpvState) => {
             setState(s)
+        })
+        const offPlaylist = window.electron.on("mpv:playlist-changed", (info: ClientMpvPlaylistChangedInfo) => {
+            log.info("mpv playlist position changed", info)
+            const prevSession = sessionRef.current
+            const prevState = stateRef.current
+            if (!info?.item) return
+
+            // If the prior episode was watched past the completion
+            // threshold, treat the playlist-advance as a "finished"
+            // event for that episode and sync its AniList progress.
+            // Otherwise just cancel its manual tracking; we don't want
+            // a partially-watched episode showing up as completed.
+            if (prevSession) {
+                const ratio = prevState && prevState.duration > 0
+                    ? prevState.timePos / prevState.duration
+                    : 0
+                if (ratio >= CLIENT_MPV_COMPLETION_THRESHOLD) {
+                    log.info("Prior episode passed completion threshold; syncing before swap", {
+                        mediaId: prevSession.mediaId,
+                        episode: prevSession.episodeNumber,
+                        ratio,
+                    })
+                    syncProgress()
+                } else {
+                    cancelManualTracking()
+                }
+            }
+
+            // Re-key the active session so progress / continuity writes
+            // attribute to the new episode going forward.
+            setSession({
+                mediaId: info.item.mediaId,
+                episodeNumber: info.item.episodeNumber,
+                filePath: info.item.filePath,
+                fileTitle: info.item.fileTitle,
+                totalDuration: null,
+                startedAt: Date.now(),
+            })
+            // Reset state — duration / time-pos for the new file haven't
+            // arrived yet, and we don't want the continuity flusher to
+            // accidentally write the old position against the new
+            // episode in the gap.
+            setState(null)
+
+            // Register the new episode with the playback manager so
+            // sync-current-progress (fired on EOF/exit) targets the
+            // right AniList entry.
+            startManualTracking({
+                mediaId: info.item.mediaId,
+                episodeNumber: info.item.episodeNumber,
+                clientId: clientIdRef.current || "",
+            })
         })
         const offExit = window.electron.on("mpv:exited", (info: ClientMpvExitedInfo) => {
             log.info("mpv exited", info)
@@ -332,8 +442,9 @@ export function useClientMpvEventBridge() {
         return () => {
             try { offState && offState() } catch {}
             try { offExit && offExit() } catch {}
+            try { offPlaylist && offPlaylist() } catch {}
         }
-    }, [setState, setActive, setSession, syncProgress, cancelManualTracking])
+    }, [setState, setActive, setSession, syncProgress, cancelManualTracking, startManualTracking])
 }
 
 // How often to push the current time-pos to seanime's Continuity store

@@ -59,10 +59,16 @@ export function useHandlePlayMedia() {
         path,
         mediaId,
         episode,
+        playlistEpisodes,
     }: {
         path: string,
         mediaId: number,
-        episode: Anime_Episode
+        episode: Anime_Episode,
+        // Optional sibling list (typically the entry's mainEpisodes
+        // array). Currently consumed by the client-mpv branch to
+        // populate mpv's playlist so < / > can navigate between
+        // episodes; other playback branches ignore it.
+        playlistEpisodes?: Anime_Episode[],
     }) {
         const anidbEpisode = episode.localFile?.metadata?.aniDBEpisode ?? ""
 
@@ -159,6 +165,24 @@ export function useHandlePlayMedia() {
                 }
             }
 
+            // Build sibling list for mpv's playlist: take whatever
+            // mainEpisodes the caller passed in, drop the current one
+            // (it's launched separately as opts.url and re-added by
+            // the launcher), and keep only entries with real local
+            // files. The launcher sorts and dedupes again before
+            // building URLs, so we don't have to be strict here.
+            const siblingEpisodes = (playlistEpisodes || [])
+                .filter((ep) => ep && ep.localFile?.path && ep.localFile.path !== path)
+                .map((ep) => ({
+                    mediaId,
+                    episodeNumber: ep.progressNumber ?? 0,
+                    filePath: ep.localFile?.path ?? "",
+                    fileTitle: ep.displayTitle
+                        || ep.baseAnime?.title?.userPreferred
+                        || (ep.localFile?.path ?? "").split(/[\\/]/).pop()
+                        || "Seanime",
+                }))
+
             React.startTransition(() => {
                 launchClientMpv({
                     mediaId,
@@ -166,6 +190,7 @@ export function useHandlePlayMedia() {
                     filePath: path,
                     fileTitle,
                     savedPosition,
+                    siblingEpisodes: siblingEpisodes.length > 0 ? siblingEpisodes : undefined,
                 }).then(result => {
                     if (result?.ok && episode?.progressNumber && episode.type === "main") {
                         // Register the play with seanime's server so the

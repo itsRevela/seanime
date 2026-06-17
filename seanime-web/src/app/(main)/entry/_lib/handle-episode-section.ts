@@ -9,17 +9,22 @@ export function useHandleEpisodeSection(props: { entry: Anime_Entry }) {
 
     const { playMediaFile } = useHandlePlayMedia()
 
-    usePlayNextVideoOnMount({
-        onPlay: () => {
-            if (entry.nextEpisode) {
-                playMediaFile({ path: entry.nextEpisode.localFile?.path ?? "", mediaId: entry.mediaId, episode: entry.nextEpisode })
-            }
-        },
-    }, !!entry.nextEpisode)
-
     const mainEpisodes = React.useMemo(() => {
         return entry.episodes?.filter(ep => ep.type === "main") ?? []
     }, [entry.episodes])
+
+    usePlayNextVideoOnMount({
+        onPlay: () => {
+            if (entry.nextEpisode) {
+                playMediaFile({
+                    path: entry.nextEpisode.localFile?.path ?? "",
+                    mediaId: entry.mediaId,
+                    episode: entry.nextEpisode,
+                    playlistEpisodes: mainEpisodes,
+                })
+            }
+        },
+    }, !!entry.nextEpisode)
 
     const specialEpisodes = React.useMemo(() => {
         return (entry.episodes?.filter(ep => ep.type === "special") ?? [])

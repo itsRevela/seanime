@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.21
+
+- ✨ Denshi + VideoCore: Wire mpv's playlist with surrounding episodes so `<` / `>` and OSC next/prev buttons work
+  - The client-mpv launcher in v3.8.19 handed mpv a single URL, so mpv's playlist was always length-1 and its on-screen `<` / `>` buttons were greyed out even on entries where seanime had loaded a full season of episodes.
+  - **Web:** `playMediaFile` now accepts an optional `playlistEpisodes` array (the entry's `mainEpisodes`); every call site in `episode-section.tsx` and the auto-play-on-mount hook forwards it. `useLaunchClientMpv` turns that list into a `ClientMpvPlaylistItem[]` ordered by episode number, each with its own `/api/v1/mediastream/file?path=...` URL + HMAC token, plus a `playlistStartIndex` pointing at the current episode.
+  - **Denshi:** `MpvSession` (in `mpv-client.js`) keeps the IPC-driven launch with `--start=<savedPosition>` applied to the first file, then after observers are installed it walks the supplied playlist — `loadfile <url> insert-at 0` for each previous episode (reversed so they land in natural order) and `loadfile <url> append` for each later episode. It also observes the `playlist-pos` property and emits a new `mpv:playlist-changed` event when mpv moves to a different item.
+  - **Progress attribution:** the renderer's mpv event bridge listens for the new event, cancels the previous episode's manual-tracking session (or syncs progress if the previous episode had crossed the 80 % completion threshold), re-keys `__clientMpv_sessionAtom` to the new item, and starts a fresh manual-tracking registration so AniList sync and Continuity writes target the correct episode after an auto-advance.
+  - Specials, "Others", external nakama playlists, and the global playlist manager are intentionally left without a sibling queue — different mental model, and the current change keeps the scope to main-series playback.
+
 ## v3.8.20
 
 - 🦺 VideoCore: Show the client-mpv settings card and dispatch path when Denshi loads from a remote server

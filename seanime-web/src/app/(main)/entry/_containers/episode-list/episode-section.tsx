@@ -83,6 +83,7 @@ export function EpisodeSection({ entry, details, bottomSection, hideCarousel, ma
                     path: episode.localFile?.path ?? "",
                     mediaId: entry.mediaId,
                     episode: episode as Anime_Episode,
+                    playlistEpisodes: mainEpisodes,
                 }),
             })),
             filter: ({ item, input }) => {
@@ -171,6 +172,7 @@ export function EpisodeSection({ entry, details, bottomSection, hideCarousel, ma
                                                 path: episode.localFile?.path ?? "",
                                                 mediaId: entry.mediaId,
                                                 episode: episode,
+                                                playlistEpisodes: mainEpisodes,
                                             })}
                                             anime={{
                                                 id: entry.mediaId,
@@ -185,6 +187,7 @@ export function EpisodeSection({ entry, details, bottomSection, hideCarousel, ma
                                                                 path: episode.localFile?.path ?? "",
                                                                 mediaId: entry.mediaId,
                                                                 episode: episode,
+                                                                playlistEpisodes: mainEpisodes,
                                                             })
                                                         })
                                                     }}
@@ -212,12 +215,18 @@ export function EpisodeSection({ entry, details, bottomSection, hideCarousel, ma
                                 media={media}
                                 isWatched={!!entry.listData?.progress && entry.listData.progress >= mainEpisodes[index].progressNumber}
                                 watchedProgress={entry.listData?.progress}
-                                onPlay={({ path, mediaId }) => playMediaFile({ path, mediaId, episode: mainEpisodes[index] })}
+                                onPlay={({ path, mediaId }) => playMediaFile({
+                                    path,
+                                    mediaId,
+                                    episode: mainEpisodes[index],
+                                    playlistEpisodes: mainEpisodes,
+                                })}
                                 onPlayExternally={!isUsingNativePlayer ? undefined : ({ path, mediaId }) => forcePlaybackMethodFn("playbackmanager",
                                     () => playMediaFile({
                                         path,
                                         mediaId,
                                         episode: mainEpisodes[index],
+                                        playlistEpisodes: mainEpisodes,
                                     }))}
                                 percentageComplete={getEpisodePercentageComplete(watchHistory, entry.mediaId, mainEpisodes[index].episodeNumber)}
                                 minutesRemaining={getEpisodeMinutesRemaining(watchHistory, entry.mediaId, mainEpisodes[index].episodeNumber)}

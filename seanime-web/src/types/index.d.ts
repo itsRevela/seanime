@@ -114,6 +114,23 @@ declare global {
         __isElectronDesktop__?: boolean;
     }
 
+    interface ClientMpvPlaylistItem {
+        // Fully-built HTTP URL for this episode (path + HMAC token).
+        url: string;
+        // AniList media id for the entry this episode belongs to. Same
+        // for every item in a single-series playlist.
+        mediaId: number;
+        // Episode's progress number (1-based). Used to re-key manual
+        // tracking when mpv auto-advances.
+        episodeNumber: number;
+        // Server-side library path; surfaced back so continuity writes
+        // can record `filepath` accurately for the now-playing item.
+        filePath: string;
+        // Display title (anime + episode) for OSD / window-title swap
+        // when the item becomes active.
+        fileTitle: string;
+    }
+
     interface ClientMpvLaunchOptions {
         // HTTP URL mpv should open. Built by the renderer from the seanime
         // /api/v1/mediastream/file?path=... endpoint plus an HMAC token
@@ -134,6 +151,12 @@ declare global {
         // Override path to mpv.exe; falls back to PATH / well-known
         // locations when unset.
         mpvPath?: string;
+        // Sibling episodes to push into mpv's playlist after launch so
+        // < / > keys and the OSC next/prev buttons can navigate to the
+        // surrounding episodes. The item at `playlistStartIndex`
+        // corresponds to `url` above.
+        playlist?: ClientMpvPlaylistItem[];
+        playlistStartIndex?: number;
     }
 
     interface ClientMpvState {
@@ -150,6 +173,17 @@ declare global {
         signal?: string;
         error?: string;
         completedNaturally: boolean;
+    }
+
+    interface ClientMpvPlaylistChangedInfo {
+        // 0-based playlist index mpv moved FROM (the prior active item).
+        from: number;
+        // 0-based playlist index mpv moved TO (the new active item).
+        to: number;
+        // The renderer-provided metadata for the new item, or null if
+        // mpv moved to an index outside the known playlist (shouldn't
+        // happen but guarded against).
+        item: ClientMpvPlaylistItem | null;
     }
 
     interface CastDevice {

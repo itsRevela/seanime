@@ -105,15 +105,32 @@ function makeIpcPath() {
 }
 
 class MpvSession {
-    constructor({ mpvPath, url, title, savedPosition, externalSubtitles, mpvArgs, onState, onExited, onLog }) {
+    constructor({ mpvPath, url, title, savedPosition, externalSubtitles, mpvArgs, playlist, playlistStartIndex, onState, onExited, onPlaylistChanged, onLog }) {
         this.mpvPath = mpvPath
         this.url = url
         this.title = title || null
         this.savedPosition = typeof savedPosition === "number" ? savedPosition : null
         this.externalSubtitles = Array.isArray(externalSubtitles) ? externalSubtitles : []
         this.userMpvArgs = typeof mpvArgs === "string" ? mpvArgs.split(/\s+/).filter(Boolean) : []
+        // Optional sibling-episode playlist: array of { url, ... } items.
+        // mpv plays opts.url first (with --start applied), then we use IPC
+        // to extend the playlist in both directions so mpv's < / > buttons
+        // can navigate to neighbouring episodes. playlistStartIndex says
+        // which entry corresponds to opts.url (so prior items are
+        // "previous", later items are "next").
+        this.playlist = Array.isArray(playlist) ? playlist : []
+        this.playlistStartIndex = typeof playlistStartIndex === "number" && playlistStartIndex >= 0
+            ? playlistStartIndex
+            : 0
+        // Current playlist position (0-based) in mpv's view. Updated when
+        // the playlist-pos property changes. Starts at playlistStartIndex
+        // because that's the item we launched with after the insert/append
+        // dance below; mpv will report this back to us once observers are
+        // installed.
+        this.currentPlaylistIndex = this.playlistStartIndex
         this.onState = onState || (() => {})
         this.onExited = onExited || (() => {})
+        this.onPlaylistChanged = onPlaylistChanged || (() => {})
         this.onLog = onLog || (() => {})
 
         this.ipcPath = makeIpcPath()
@@ -302,6 +319,18 @@ class MpvSession {
                 case "track-list":
                     this.state.tracks = Array.isArray(msg.data) ? msg.data : []
                     break
+                case "playlist-pos":
+                    if (typeof msg.data === "number" && msg.data >= 0 && msg.data !== this.currentPlaylistIndex) {
+                        const prev = this.currentPlaylistIndex
+                        this.currentPlaylistIndex = msg.data
+                        const item = this.playlist[msg.data] || null
+                        this.onPlaylistChanged({
+                            from: prev,
+                            to: msg.data,
+                            item,
+                        })
+                    }
+                    break
             }
             this.maybeEmitState()
             return
@@ -334,9 +363,53 @@ class MpvSession {
         await this.sendCommand(["observe_property", 104, "eof-reached"])
         await this.sendCommand(["observe_property", 105, "media-title"])
         await this.sendCommand(["observe_property", 106, "track-list"])
+        // playlist-pos is what changes when mpv auto-advances to the
+        // next item or when the user hits < / > in the OSC. We watch it
+        // so we can re-key the renderer's "currently playing" session
+        // to the right episode for progress / continuity attribution.
+        await this.sendCommand(["observe_property", 107, "playlist-pos"])
+        // Extend mpv's single-item playlist with the surrounding
+        // episodes (if any were provided). Done after observers are
+        // installed so we can see the playlist-pos updates that mpv
+        // emits as items are inserted/appended.
+        await this.populatePlaylist()
         // Pump an initial snapshot to the renderer so the UI doesn't
         // wait up to 1 second for the first property tick.
         this.maybeEmitState(true)
+    }
+
+    async populatePlaylist() {
+        if (this.playlist.length <= 1) return
+
+        // Previous episodes (everything before playlistStartIndex). We
+        // walk from closest-prev outward and insert each at position 0;
+        // that way the final order ends up as
+        // [earliest, ..., prev1, current, ...]. mpv's "insert-at 0"
+        // shifts the playing item's index forward automatically, so we
+        // also need to track currentPlaylistIndex ourselves until the
+        // playlist-pos observer reports the final value.
+        for (let i = this.playlistStartIndex - 1; i >= 0; i--) {
+            const item = this.playlist[i]
+            if (!item || typeof item.url !== "string") continue
+            try {
+                await this.sendCommand(["loadfile", item.url, "insert-at", 0])
+                this.currentPlaylistIndex++
+            } catch (err) {
+                this.onLog("warn", `failed to insert previous playlist item ${i}: ${err.message}`)
+            }
+        }
+
+        // Next episodes (everything after playlistStartIndex). Plain
+        // append — mpv puts them at the end of the playlist in order.
+        for (let i = this.playlistStartIndex + 1; i < this.playlist.length; i++) {
+            const item = this.playlist[i]
+            if (!item || typeof item.url !== "string") continue
+            try {
+                await this.sendCommand(["loadfile", item.url, "append"])
+            } catch (err) {
+                this.onLog("warn", `failed to append next playlist item ${i}: ${err.message}`)
+            }
+        }
     }
 
     sendCommand(cmd) {
@@ -428,11 +501,14 @@ async function launchMpv(opts) {
         savedPosition: opts.savedPosition,
         externalSubtitles: opts.externalSubtitles || [],
         mpvArgs: opts.mpvArgs || "",
+        playlist: opts.playlist || [],
+        playlistStartIndex: opts.playlistStartIndex,
         onState: opts.onState,
         onExited: (info) => {
             if (activeSession === session) activeSession = null
             if (opts.onExited) opts.onExited(info)
         },
+        onPlaylistChanged: opts.onPlaylistChanged,
         onLog: opts.onLog,
     })
     activeSession = session

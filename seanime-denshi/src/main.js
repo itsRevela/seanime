@@ -1608,8 +1608,11 @@ app.whenReady().then(async () => {
                 externalSubtitles: opts.externalSubtitles,
                 mpvArgs: opts.mpvArgs,
                 mpvPathOverride: opts.mpvPath,
+                playlist: opts.playlist,
+                playlistStartIndex: opts.playlistStartIndex,
                 onState: (state) => sendMpvEvent("mpv:state", state),
                 onExited: (info) => sendMpvEvent("mpv:exited", info),
+                onPlaylistChanged: (info) => sendMpvEvent("mpv:playlist-changed", info),
                 onLog: (level, message) => {
                     // Forward stdout/stderr/info to electron-log so users
                     // can diagnose mpv failures via the standard log files.
