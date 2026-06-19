@@ -143,22 +143,24 @@ class MpvSession {
             : 0
         // Current playlist position (0-based) in mpv's view. Starts at
         // 0 because mpv launches with a single-item playlist (just
-        // opts.url) — so mpv's own playlist-pos really is 0 at this
-        // point, not playlistStartIndex. populatePlaylist() increments
-        // this every time it inserts an item at position 0, mirroring
-        // the way mpv shifts the currently-playing item's index
-        // forward. By the time populate finishes, this matches mpv's
-        // reported playlist-pos (= playlistStartIndex).
-        //
-        // Initializing this to playlistStartIndex would make the very
-        // first property-change event from observe_property (which
-        // fires with playlist-pos=0 right after registration) look like
-        // a navigation event, and the handler would call
-        // setProperty("force-media-title", playlist[0].fileTitle) —
-        // i.e. force the window/OSC title to "Episode 1" before any
-        // real navigation happened. That's the bug that made clicking
-        // ep12 of Elfen Lied show "Episode 2 / 4" on launch.
+        // opts.url) — its own playlist-pos really is 0 until we start
+        // inserting items. populatePlaylist() suppresses the
+        // playlist-pos handler while it runs and reads the
+        // authoritative value back from mpv when it finishes, so this
+        // ends up matching whatever final position mpv lands on (=
+        // playlistStartIndex once all the insert-at 0 calls have
+        // shifted the currently-playing item forward).
         this.currentPlaylistIndex = 0
+        // True while populatePlaylist is in flight. mpv emits
+        // playlist-pos property-change events as items are inserted in
+        // front of the currently-playing one, but those aren't real
+        // navigation — just bookkeeping. The handler treats them as
+        // user-driven seeks otherwise, which was firing
+        // setProperty("force-media-title", playlist[1].fileTitle)
+        // because the response/event ordering on the IPC socket isn't
+        // guaranteed and the property-change can land before the
+        // sendCommand's own promise resolves.
+        this.populating = false
         this.onState = onState || (() => {})
         this.onExited = onExited || (() => {})
         this.onPlaylistChanged = onPlaylistChanged || (() => {})
@@ -366,28 +368,40 @@ class MpvSession {
                     this.state.tracks = Array.isArray(msg.data) ? msg.data : []
                     break
                 case "playlist-pos":
-                    if (typeof msg.data === "number" && msg.data >= 0 && msg.data !== this.currentPlaylistIndex) {
-                        const prev = this.currentPlaylistIndex
-                        this.currentPlaylistIndex = msg.data
-                        const item = this.playlist[msg.data] || null
-                        // Push the new episode's title into mpv so the
-                        // window title (via the ${media-title} template
-                        // in --title) and the OSC's "currently playing"
-                        // label both reflect the now-playing item
-                        // instead of staying stuck on whatever we
-                        // launched with. force-media-title is sticky
-                        // for the session, so it has to be explicitly
-                        // rewritten every time we advance.
-                        if (item && item.fileTitle) {
-                            this.setProperty("force-media-title", item.fileTitle).catch((err) => {
-                                this.onLog("warn", `failed to update force-media-title: ${err.message}`)
+                    if (typeof msg.data === "number" && msg.data >= 0) {
+                        if (this.populating) {
+                            // Track mpv's authoritative position
+                            // silently — events during populate are
+                            // just side-effects of insert-at 0, not
+                            // real navigation. Skip the title rewrite
+                            // and the onPlaylistChanged emit.
+                            this.currentPlaylistIndex = msg.data
+                            break
+                        }
+                        if (msg.data !== this.currentPlaylistIndex) {
+                            const prev = this.currentPlaylistIndex
+                            this.currentPlaylistIndex = msg.data
+                            const item = this.playlist[msg.data] || null
+                            // Push the new episode's title into mpv so
+                            // the window title (via the ${media-title}
+                            // template in --title) and the OSC's
+                            // "currently playing" label both reflect
+                            // the now-playing item instead of staying
+                            // stuck on whatever we launched with.
+                            // force-media-title is sticky for the
+                            // session, so it has to be explicitly
+                            // rewritten every time we advance.
+                            if (item && item.fileTitle) {
+                                this.setProperty("force-media-title", item.fileTitle).catch((err) => {
+                                    this.onLog("warn", `failed to update force-media-title: ${err.message}`)
+                                })
+                            }
+                            this.onPlaylistChanged({
+                                from: prev,
+                                to: msg.data,
+                                item,
                             })
                         }
-                        this.onPlaylistChanged({
-                            from: prev,
-                            to: msg.data,
-                            item,
-                        })
                     }
                     break
             }
@@ -440,34 +454,65 @@ class MpvSession {
     async populatePlaylist() {
         if (this.playlist.length <= 1) return
 
-        // Previous episodes (everything before playlistStartIndex). We
-        // walk from closest-prev outward and insert each at position 0;
-        // that way the final order ends up as
-        // [earliest, ..., prev1, current, ...]. mpv's "insert-at 0"
-        // shifts the playing item's index forward automatically, so we
-        // also need to track currentPlaylistIndex ourselves until the
-        // playlist-pos observer reports the final value.
-        for (let i = this.playlistStartIndex - 1; i >= 0; i--) {
-            const item = this.playlist[i]
-            if (!item || typeof item.url !== "string") continue
-            try {
-                await this.sendCommand(["loadfile", item.url, "insert-at", 0])
-                this.currentPlaylistIndex++
-            } catch (err) {
-                this.onLog("warn", `failed to insert previous playlist item ${i}: ${err.message}`)
+        // Flag the handler to suppress events fired during populate.
+        // mpv emits a playlist-pos change for every insert-at 0 (the
+        // currently-playing item gets shifted forward), but those
+        // aren't real navigation — they're an implementation detail.
+        // Without this guard the response/event order on the IPC
+        // socket is racy: if the property-change is dispatched before
+        // sendCommand's own response, the handler treats the very
+        // first insert as a user seek to index 1 and overwrites the
+        // window/OSC title with playlist[1].fileTitle (i.e. ep2 when
+        // launching ep8). See the playlist-pos branch in
+        // handleIpcMessage for the suppressed path.
+        this.populating = true
+        try {
+            // Previous episodes (everything before playlistStartIndex).
+            // Walk from closest-prev outward and insert each at
+            // position 0 so the final order ends up
+            // [earliest, ..., prev1, current, ...]. mpv shifts the
+            // playing item's index forward on each insert; the handler
+            // tracks that silently while populating == true.
+            for (let i = this.playlistStartIndex - 1; i >= 0; i--) {
+                const item = this.playlist[i]
+                if (!item || typeof item.url !== "string") continue
+                try {
+                    await this.sendCommand(["loadfile", item.url, "insert-at", 0])
+                } catch (err) {
+                    this.onLog("warn", `failed to insert previous playlist item ${i}: ${err.message}`)
+                }
             }
+
+            // Next episodes (everything after playlistStartIndex).
+            // Plain append — mpv puts them at the end of the playlist
+            // in order and doesn't shift the playing item's position.
+            for (let i = this.playlistStartIndex + 1; i < this.playlist.length; i++) {
+                const item = this.playlist[i]
+                if (!item || typeof item.url !== "string") continue
+                try {
+                    await this.sendCommand(["loadfile", item.url, "append"])
+                } catch (err) {
+                    this.onLog("warn", `failed to append next playlist item ${i}: ${err.message}`)
+                }
+            }
+        } finally {
+            this.populating = false
         }
 
-        // Next episodes (everything after playlistStartIndex). Plain
-        // append — mpv puts them at the end of the playlist in order.
-        for (let i = this.playlistStartIndex + 1; i < this.playlist.length; i++) {
-            const item = this.playlist[i]
-            if (!item || typeof item.url !== "string") continue
-            try {
-                await this.sendCommand(["loadfile", item.url, "append"])
-            } catch (err) {
-                this.onLog("warn", `failed to append next playlist item ${i}: ${err.message}`)
+        // Read mpv's authoritative playlist-pos and re-anchor our
+        // tracker. The silent-update branch in handleIpcMessage
+        // already kept currentPlaylistIndex in step with mpv during
+        // populate, but if any property-change event got missed
+        // (rare, but possible if mpv batched it differently or the
+        // socket dropped) this round-trip guarantees we're in sync
+        // before the user can interact with < / >.
+        try {
+            const pos = await this.sendCommand(["get_property", "playlist-pos"])
+            if (typeof pos === "number" && pos >= 0) {
+                this.currentPlaylistIndex = pos
             }
+        } catch (err) {
+            this.onLog("warn", `failed to read final playlist-pos: ${err.message}`)
         }
     }
 

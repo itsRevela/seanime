@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.25
+
+- 🐛 Denshi: Suppress spurious playlist-pos events during mid-series launches (mpv title + AniList sync targeted the wrong episode)
+  - v3.8.22 wired `set_property force-media-title` to fire on every `playlist-pos` change, and v3.8.23 fixed the bogus event at observe-registration time. Both stayed silent for ep1 launches because the `populatePlaylist` loop only does `loadfile … append` after ep1, which doesn't shift the playing item's index. But for mid-series launches (clicking ep8 of 12), `populatePlaylist` issues `loadfile … insert-at 0` for each earlier episode — and every one of those nudges mpv's `playlist-pos` forward by 1.
+  - The race: mpv emits two IPC messages back-to-back for each `insert-at 0` — the `{ok}` response to our `sendCommand` and a `{property-change, playlist-pos=N+1}` event. Their dispatch order on the IPC socket isn't guaranteed. When the property-change reaches the handler first, `msg.data` (= 1 for the first insert) doesn't match the not-yet-incremented `this.currentPlaylistIndex` (= 0), so the handler interpreted it as user navigation: it set `force-media-title` to `playlist[1].fileTitle` (= ep2 in the sorted playlist) AND emitted `mpv:playlist-changed` to the renderer, which then re-keyed `__clientMpv_sessionAtom` to ep2 metadata and registered manual-tracking for ep2 even though mpv was actually playing ep8. On `mpv:exited` past the 80 % threshold this also caused `syncProgress()` to push ep2's progress to AniList instead of ep8's.
+  - `seanime-denshi/src/mpv-client.js` now sets `this.populating = true` for the duration of `populatePlaylist`, and the playlist-pos handler silently tracks `msg.data` into `currentPlaylistIndex` (no title rewrite, no `onPlaylistChanged` emit) while that flag is set. After population finishes, a `get_property playlist-pos` round-trip re-anchors the tracker to mpv's authoritative value as a safety net. The legacy manual `currentPlaylistIndex++` in the insert loop is removed (it was racy and is no longer needed — the silent-track branch keeps us in sync from mpv's own events).
+
 ## v3.8.24
 
 - 🐛 Denshi: Give mpv a writable screenshot directory so `s` / `Shift+s` stop erroring
