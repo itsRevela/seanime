@@ -24,10 +24,29 @@ const { spawn } = require("child_process")
 const net = require("net")
 const fs = require("fs")
 const path = require("path")
+const os = require("os")
 // electron-log v5 splits into main/renderer entry points; use the main
 // variant explicitly to match the rest of Denshi (main.js loads
 // "electron-log/main").
 const log = require("electron-log/main")
+
+// Where mpv should drop screenshots. By default mpv writes to its CWD,
+// which for us is whatever directory Denshi was launched from (usually
+// the install dir under Program Files / %LOCALAPPDATA%\Programs — often
+// read-only, and not a place users want screenshot files scattered).
+// Resolve a per-user "Pictures/seanime" folder and create it on first
+// use so mpv's `s` / `S` keybinds always have a writable target.
+// Returns null on any error so the caller can skip the arg and let mpv
+// fall back to its default behaviour instead of failing outright.
+function resolveScreenshotDir() {
+    try {
+        const dir = path.join(os.homedir(), "Pictures", "seanime")
+        fs.mkdirSync(dir, { recursive: true })
+        return dir
+    } catch {
+        return null
+    }
+}
 
 // Where Windows users typically install mpv. We pick the first that
 // exists; PATH lookup ("mpv") is tried before any of these so PATH wins
@@ -182,6 +201,13 @@ class MpvSession {
             "--keep-open=yes",
             ...this.userMpvArgs,
         ]
+        // Point mpv at a writable screenshot directory so `s` / `S`
+        // (and `Shift+s` for "no subs") don't fail with "Error writing
+        // screenshot" when mpv's CWD is Denshi's install dir.
+        const screenshotDir = resolveScreenshotDir()
+        if (screenshotDir) {
+            args.push(`--screenshot-directory=${screenshotDir}`)
+        }
         if (this.title) {
             args.push(`--force-media-title=${this.title}`)
             // Use mpv's property expansion in the window title so it

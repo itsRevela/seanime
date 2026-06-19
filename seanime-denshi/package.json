@@ -1,6 +1,6 @@
 {
   "name": "seanime-denshi",
-  "version": "3.8.23",
+  "version": "3.8.24",
   "description": "Electron-based Desktop client for Seanime",
   "main": "src/main.js",
   "author": "revela <contact@revela.dev>",

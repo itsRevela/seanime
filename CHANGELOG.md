@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.24
+
+- 🐛 Denshi: Give mpv a writable screenshot directory so `s` / `Shift+s` stop erroring
+  - mpv writes screenshots to its current working directory by default. Denshi spawned mpv without setting `cwd`, so it inherited Denshi's launch directory — usually `Program Files\seanime-denshi\` or `%LOCALAPPDATA%\Programs\seanime-denshi\`, both of which are write-protected or otherwise undesirable as screenshot dumping grounds. The user-visible symptom was `Error writing screenshot` on the OSD whenever the user pressed `s` (with subs) or `Shift+s` (without subs).
+  - `seanime-denshi/src/mpv-client.js` now resolves `<user-home>/Pictures/seanime/`, creates it recursively on first launch (idempotent — does nothing if it already exists), and passes the path to mpv via `--screenshot-directory=`. Wrapped in a try/catch so a failure to create the directory (e.g. read-only home) leaves the arg off entirely and lets mpv fall back to its default behaviour rather than blocking the entire launch.
+
 ## v3.8.23
 
 - 🐛 Denshi: Stop the playlist-pos initial-observe event from clobbering the launch title
