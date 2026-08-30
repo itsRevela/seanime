@@ -11812,6 +11812,40 @@
     }
   },
   {
+    "name": "HandleGetMediaWatchActivity",
+    "trimmedName": "GetMediaWatchActivity",
+    "comments": [
+      "HandleGetMediaWatchActivity",
+      "",
+      "\t@summary returns the watch activity recorded by Seanime.",
+      "\t@desc Each item records the last time a media was played or had its progress updated through Seanime",
+      "\t@desc (integrated media players, manual tracking, the built-in player, or the update-progress endpoints).",
+      "\t@desc The item ID is the AniList media ID. This is independent of AniList's own timestamps.",
+      "\t@route /api/v1/library/watch-activity [GET]",
+      "\t@returns []models.MediaWatchActivity",
+      ""
+    ],
+    "filepath": "internal/handlers/watch_activity.go",
+    "filename": "watch_activity.go",
+    "api": {
+      "summary": "returns the watch activity recorded by Seanime.",
+      "descriptions": [
+        "Each item records the last time a media was played or had its progress updated through Seanime",
+        "(integrated media players, manual tracking, the built-in player, or the update-progress endpoints).",
+        "The item ID is the AniList media ID. This is independent of AniList's own timestamps."
+      ],
+      "endpoint": "/api/v1/library/watch-activity",
+      "methods": [
+        "GET"
+      ],
+      "params": [],
+      "bodyFields": [],
+      "returns": "[]models.MediaWatchActivity",
+      "returnGoType": "models.MediaWatchActivity",
+      "returnTypescriptType": "Array\u003cModels_MediaWatchActivity\u003e"
+    }
+  },
+  {
     "name": "webSocketEventHandler",
     "trimmedName": "webSocketEventHandler",
     "comments": [

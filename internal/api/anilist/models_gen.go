@@ -492,7 +492,7 @@ type GenreStats struct {
 	TimeWatched *int `json:"timeWatched,omitempty"`
 }
 
-// Page of data (Used for internal use only)
+// Page of data. Limited to a max depth of 5000 entries. This is calculated as the page parameter multiplied by the perPage parameter.
 type InternalPage struct {
 	MediaSubmissions     []*MediaSubmission     `json:"mediaSubmissions,omitempty"`
 	CharacterSubmissions []*CharacterSubmission `json:"characterSubmissions,omitempty"`
@@ -1188,6 +1188,8 @@ type MessageActivity struct {
 	LikeCount int `json:"likeCount"`
 	// If the currently authenticated user liked the activity
 	IsLiked *bool `json:"isLiked,omitempty"`
+	// If the activity is pinned to the top of the users activity feed
+	IsPinned *bool `json:"isPinned,omitempty"`
 	// If the message is private and only viewable to the sender and recipients
 	IsPrivate *bool `json:"isPrivate,omitempty"`
 	// The url for the activity page on the AniList website
@@ -1239,7 +1241,7 @@ type NotificationOptionInput struct {
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
-// Page of data
+// Page of data. Limited to a max depth of 5000 entries. This is calculated as the page parameter multiplied by the perPage parameter.
 type Page struct {
 	// The pagination information
 	PageInfo        *PageInfo           `json:"pageInfo,omitempty"`
@@ -1953,8 +1955,9 @@ type User struct {
 	// If this user if following the authenticated user
 	IsFollower *bool `json:"isFollower,omitempty"`
 	// If the user is blocked by the authenticated user
-	IsBlocked *bool   `json:"isBlocked,omitempty"`
-	Bans      *string `json:"bans,omitempty"`
+	IsBlocked *bool `json:"isBlocked,omitempty"`
+	// List of active bans. Mod-only
+	Bans *string `json:"bans,omitempty"`
 	// The user's general options
 	Options *UserOptions `json:"options,omitempty"`
 	// The user's media list options
@@ -1985,7 +1988,7 @@ type User struct {
 	PreviousNames []*UserPreviousName `json:"previousNames,omitempty"`
 }
 
-// A user's activity history stats.
+// A user's activity history stats for the previous 6 months. Refreshes only periodically
 type UserActivityHistory struct {
 	// The day the activity took place (Unix timestamp)
 	Date *int `json:"date,omitempty"`
@@ -3062,6 +3065,8 @@ const (
 	MediaRelationCompilation MediaRelation = "COMPILATION"
 	// Version 2 only.
 	MediaRelationContains MediaRelation = "CONTAINS"
+	// Version 3 only. The media is set in the same universe as another media
+	MediaRelationSameUniverse MediaRelation = "SAME_UNIVERSE"
 )
 
 var AllMediaRelation = []MediaRelation{
@@ -3078,11 +3083,12 @@ var AllMediaRelation = []MediaRelation{
 	MediaRelationSource,
 	MediaRelationCompilation,
 	MediaRelationContains,
+	MediaRelationSameUniverse,
 }
 
 func (e MediaRelation) IsValid() bool {
 	switch e {
-	case MediaRelationAdaptation, MediaRelationPrequel, MediaRelationSequel, MediaRelationParent, MediaRelationSideStory, MediaRelationCharacter, MediaRelationSummary, MediaRelationAlternative, MediaRelationSpinOff, MediaRelationOther, MediaRelationSource, MediaRelationCompilation, MediaRelationContains:
+	case MediaRelationAdaptation, MediaRelationPrequel, MediaRelationSequel, MediaRelationParent, MediaRelationSideStory, MediaRelationCharacter, MediaRelationSummary, MediaRelationAlternative, MediaRelationSpinOff, MediaRelationOther, MediaRelationSource, MediaRelationCompilation, MediaRelationContains, MediaRelationSameUniverse:
 		return true
 	}
 	return false
@@ -3126,13 +3132,13 @@ func (e MediaRelation) MarshalJSON() ([]byte, error) {
 type MediaSeason string
 
 const (
-	// Months December to February
+	// Predominantly started airing between January and March
 	MediaSeasonWinter MediaSeason = "WINTER"
-	// Months March to May
+	// Predominantly started airing between April and June
 	MediaSeasonSpring MediaSeason = "SPRING"
-	// Months June to August
+	// Predominantly started airing between July and September
 	MediaSeasonSummer MediaSeason = "SUMMER"
-	// Months September to November
+	// Predominantly started airing between October and November
 	MediaSeasonFall MediaSeason = "FALL"
 )
 

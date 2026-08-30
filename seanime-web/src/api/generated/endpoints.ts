@@ -1679,8 +1679,8 @@ export const API_ENDPOINTS = {
          *  Route returns the episode list for the given media and provider.
          *  It returns the episode list for the given media and provider.
          *  The episodes are cached using a file cache.
-         *  The episode list is just a list of episodes with no video sources, it's what the client uses to display the episodes and subsequently
-         *     fetch the sources. The episode list might be nil or empty if nothing could be found, but the media will always be returned.
+         *  The episode list is just a list of episodes with no video sources, it's what the client uses to display the episodes and subsequently fetch the sources.
+         *  The episode list might be nil or empty if nothing could be found, but the media will always be returned.
          */
         GetOnlineStreamEpisodeList: {
             key: "ONLINESTREAM-get-online-stream-episode-list",
@@ -2330,6 +2330,20 @@ export const API_ENDPOINTS = {
             key: "VIDEOCORE-video-core-in-sight-get-character-details",
             methods: ["GET"],
             endpoint: "/api/v1/videocore/insight/character/{malId}",
+        },
+    },
+    WATCH_ACTIVITY: {
+        /**
+         *  @description
+         *  Route returns the watch activity recorded by Seanime.
+         *  Each item records the last time a media was played or had its progress updated through Seanime
+         *  (integrated media players, manual tracking, the built-in player, or the update-progress endpoints).
+         *  The item ID is the AniList media ID. This is independent of AniList's own timestamps.
+         */
+        GetMediaWatchActivity: {
+            key: "WATCH-ACTIVITY-get-media-watch-activity",
+            methods: ["GET"],
+            endpoint: "/api/v1/library/watch-activity",
         },
     },
 } satisfies ApiEndpoints

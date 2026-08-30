@@ -148,6 +148,7 @@ func (a *App) initModulesOnce() {
 		WsEventManager:      a.WSEventManager,
 		Logger:              a.Logger,
 		ContinuityManager:   a.ContinuityManager,
+		Database:            a.Database,
 		MetadataProviderRef: a.MetadataProviderRef,
 		DiscordPresence:     a.DiscordPresence,
 		PlatformRef:         a.AnilistPlatformRef,

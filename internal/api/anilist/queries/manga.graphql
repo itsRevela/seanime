@@ -12,6 +12,7 @@ query MangaCollection ($userName: String) {
         notes
         repeat
         private
+        updatedAt
         startedAt {
           year
           month

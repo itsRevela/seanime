@@ -14,6 +14,7 @@ import {
 import { getMangaEntryLatestChapterNumber, MangaEntryFilters } from "@/app/(main)/manga/_lib/handle-manga-selected-provider"
 import sortBy from "lodash/sortBy"
 import { anilist_getUnwatchedCount } from "./media"
+import { filterEntriesWithLocalContent, sortEntriesByLastActivity, WatchActivityMap } from "./my-lists-filtering"
 
 type BaseCollectionSorting =
     "START_DATE"
@@ -30,6 +31,9 @@ type BaseCollectionSorting =
     | "PROGRESS_DESC"
     | "TITLE"
     | "TITLE_DESC"
+    // Seanime watch activity first, AniList `updatedAt` as fallback (My Lists page)
+    | "RECENTLY_WATCHED"
+    | "RECENTLY_WATCHED_DESC"
 
 
 type CollectionSorting<T extends CollectionType> = BaseCollectionSorting | (T extends "anime" ?
@@ -106,6 +110,19 @@ export const MANGA_COLLECTION_SORTING_OPTIONS = [
     ...COLLECTION_SORTING_OPTIONS,
 ]
 
+// "My Lists" page: Seanime watch activity first, AniList `updatedAt` as fallback
+export const MY_LISTS_ANIME_SORTING_OPTIONS = [
+    { label: "Recently watched", value: "RECENTLY_WATCHED_DESC" },
+    { label: "Least recently watched", value: "RECENTLY_WATCHED" },
+    ...COLLECTION_SORTING_OPTIONS,
+]
+
+export const MY_LISTS_MANGA_SORTING_OPTIONS = [
+    { label: "Recently read", value: "RECENTLY_WATCHED_DESC" },
+    { label: "Least recently read", value: "RECENTLY_WATCHED" },
+    ...COLLECTION_SORTING_OPTIONS,
+]
+
 export type CollectionType = "anime" | "manga"
 
 export type CollectionParams<T extends CollectionType> = {
@@ -117,6 +134,8 @@ export type CollectionParams<T extends CollectionType> = {
     season: AL_MediaSeason | null
     year: string | null
     isAdult: boolean
+    // Only keep entries that have local content (library files for anime, downloaded chapters for manga)
+    localOnly: boolean
 } & (T extends "manga" ? {
     unreadOnly: boolean
 } : T extends "anime" ? {
@@ -133,6 +152,7 @@ export const DEFAULT_COLLECTION_PARAMS: CollectionParams<"anime"> = {
     season: null,
     year: null,
     isAdult: false,
+    localOnly: false,
     continueWatchingOnly: false,
 }
 
@@ -145,6 +165,7 @@ export const DEFAULT_ANIME_COLLECTION_PARAMS: CollectionParams<"anime"> = {
     season: null,
     year: null,
     isAdult: false,
+    localOnly: false,
     continueWatchingOnly: false,
 }
 
@@ -157,6 +178,7 @@ export const DEFAULT_MANGA_COLLECTION_PARAMS: CollectionParams<"manga"> = {
     season: null,
     year: null,
     isAdult: false,
+    localOnly: false,
     unreadOnly: false,
 }
 
@@ -547,6 +569,35 @@ export function sortContinueWatchingEntries(
     if (sorting === "LAST_WATCHED_DESC")
         arr = sortBy(arr, n => watchHistory?.[n.baseAnime?.id!]?.timeUpdated || new Date(1000, 1, 1).toISOString())
             .reverse()
+
+    return arr
+}
+
+/**
+ * Filters and sorts the entries of the "My Lists" page.
+ * - `localOnly` keeps entries whose media has local content (library files for anime, downloaded chapters for manga)
+ * - `RECENTLY_WATCHED(_DESC)` sorts by Seanime's own watch activity, falling back to AniList's `updatedAt`
+ */
+export function filterMyListsEntries<T extends AL_MangaCollection_MediaListCollection_Lists_Entries[] | AL_AnimeCollection_MediaListCollection_Lists_Entries[], V extends CollectionType>(
+    type: V,
+    entries: T | null | undefined,
+    params: CollectionParams<V>,
+    showAdultContent: boolean | undefined,
+    mediaTagMap: Record<number, Array<string>> | null | undefined,
+    localMediaIds: ReadonlySet<number> | null | undefined,
+    watchActivity: WatchActivityMap | null | undefined,
+) {
+    let arr = filterListEntries(type, entries, params, showAdultContent, mediaTagMap)
+
+    if (params.localOnly) {
+        arr = filterEntriesWithLocalContent(arr, localMediaIds)
+    }
+
+    // Sort by Seanime watch activity (AniList `updatedAt` fallback)
+    if (getParamValue(params.sorting) === "RECENTLY_WATCHED")
+        arr = sortEntriesByLastActivity(arr, watchActivity, "asc")
+    if (getParamValue(params.sorting) === "RECENTLY_WATCHED_DESC")
+        arr = sortEntriesByLastActivity(arr, watchActivity, "desc")
 
     return arr
 }

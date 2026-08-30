@@ -68,6 +68,7 @@ export type AL_AnimeCollection_MediaListCollection_Lists_Entries = {
     score?: number
     startedAt?: AL_AnimeCollection_MediaListCollection_Lists_Entries_StartedAt
     status?: AL_MediaListStatus
+    updatedAt?: number
 }
 
 /**
@@ -817,6 +818,7 @@ export type AL_MangaCollection_MediaListCollection_Lists_Entries = {
     score?: number
     startedAt?: AL_MangaCollection_MediaListCollection_Lists_Entries_StartedAt
     status?: AL_MediaListStatus
+    updatedAt?: number
 }
 
 /**
@@ -1095,7 +1097,8 @@ export type AL_MediaRelation = "ADAPTATION" |
     "OTHER" |
     "SOURCE" |
     "COMPILATION" |
-    "CONTAINS"
+    "CONTAINS" |
+    "SAME_UNIVERSE"
 
 /**
  * - Filepath: internal/api/anilist/models_gen.go
@@ -1159,7 +1162,7 @@ export type AL_MediaSort = "ID" |
 export type AL_MediaStatus = "FINISHED" | "RELEASING" | "NOT_YET_RELEASED" | "CANCELLED" | "HIATUS"
 
 /**
- * - Filepath: internal/api/anilist/tags.go
+ * - Filepath: ..\internal\api\anilist\tags.go
  * - Filename: tags.go
  * - Package: anilist
  */
@@ -1938,7 +1941,7 @@ export type Continuity_UpdateWatchHistoryItemOptions = {
 }
 
 /**
- * - Filepath: internal/continuity/history.go
+ * - Filepath: ..\internal\continuity\history.go
  * - Filename: history.go
  * - Package: continuity
  */
@@ -3358,7 +3361,7 @@ export type Manga_PageDimension = {
 }
 
 /**
- * - Filepath: internal/manga/download.go
+ * - Filepath: ..\internal\manga\download.go
  * - Filename: download.go
  * - Package: manga
  */
@@ -3395,12 +3398,6 @@ export type Mediastream_MediaContainer = {
      */
     streamUrl: string
     mediaInfo?: MediaInfo
-    /**
-     * When true the server made an authoritative choice of streamType
-     * (e.g. transcode→direct because GPU can't decode the source codec)
-     * and the client should NOT auto-switch based on its own
-     * canPlayType check.
-     */
     forceStreamType?: boolean
 }
 
@@ -3823,14 +3820,14 @@ export type Models_HomeItem = {
 }
 
 /**
- * - Filepath: internal/database/models/models.go
+ * - Filepath: ..\internal\database\models\models.go
  * - Filename: models.go
  * - Package: models
  */
 export type Models_IntSlice = Array<number>
 
 /**
- * - Filepath: internal/database/models/models.go
+ * - Filepath: ..\internal\database\models\models.go
  * - Filename: models.go
  * - Package: models
  */
@@ -3948,6 +3945,22 @@ export type Models_MediaPlayerSettings = {
  * - Filepath: internal/database/models/models.go
  * - Filename: models.go
  * - Package: models
+ * @description
+ *  MediaWatchActivity records the last time a media was played or had its progress updated through Seanime.
+ *  One row per media; the ID is the AniList media ID.
+ */
+export type Models_MediaWatchActivity = {
+    episodeNumber: number
+    lastWatchedAt?: string
+    id: number
+    createdAt?: string
+    updatedAt?: string
+}
+
+/**
+ * - Filepath: internal/database/models/models.go
+ * - Filename: models.go
+ * - Package: models
  */
 export type Models_MediastreamSettings = {
     transcodeEnabled: boolean
@@ -4028,7 +4041,7 @@ export type Models_SilencedMediaEntry = {
 }
 
 /**
- * - Filepath: internal/database/models/models.go
+ * - Filepath: ..\internal\database\models\models.go
  * - Filename: models.go
  * - Package: models
  */
@@ -4195,7 +4208,7 @@ export type Nakama_NakamaAnimeLibrary = {
 }
 
 /**
- * - Filepath: internal/nakama/share.go
+ * - Filepath: ..\internal\nakama\share.go
  * - Filename: share.go
  * - Package: nakama
  */

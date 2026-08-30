@@ -97,6 +97,7 @@ func migrateTables(db *gorm.DB) error {
 		&models.AutoDownloaderProfile{},
 		&models.AutoDownloaderItem{},
 		&models.SilencedMediaEntry{},
+		&models.MediaWatchActivity{},
 		&models.Theme{},
 		&models.PlaylistEntry{}, // Legacy playlists
 		&models.Playlist{},

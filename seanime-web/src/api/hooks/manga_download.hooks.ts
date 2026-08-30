@@ -110,13 +110,13 @@ export function useDeleteMangaDownloadedChapters(id: Nullish<string | number>, p
     })
 }
 
-export function useGetMangaDownloadsList() {
+export function useGetMangaDownloadsList({ enabled }: { enabled?: boolean } = { enabled: true }) {
 
     return useServerQuery<Array<Manga_DownloadListItem>>({
         endpoint: API_ENDPOINTS.MANGA_DOWNLOAD.GetMangaDownloadsList.endpoint,
         method: API_ENDPOINTS.MANGA_DOWNLOAD.GetMangaDownloadsList.methods[0],
         queryKey: [API_ENDPOINTS.MANGA_DOWNLOAD.GetMangaDownloadsList.key],
-        enabled: true,
+        enabled: enabled,
     })
 }
 

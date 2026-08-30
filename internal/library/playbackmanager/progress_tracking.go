@@ -115,6 +115,11 @@ func (pm *PlaybackManager) handleTrackingStarted(status *mediaplayer.PlaybackSta
 		Filepath:      pm.currentLocalFile.MustGet().GetPath(),
 	})
 
+	pm.recordWatchActivity(
+		pm.currentMediaListEntry.MustGet().GetMedia().GetID(),
+		pm.currentLocalFileWrapperEntry.MustGet().GetProgressNumber(pm.currentLocalFile.MustGet()),
+	)
+
 	// append next episode to media player if no playlist is active
 	if !pm.isPlaylistActive.Load() && pm.settings.AutoPlayNextEpisode {
 		if nextEpisode, ok := currentLocalFileWrapperEntry.FindNextEpisode(currentLocalFile); ok {
@@ -310,6 +315,8 @@ func (pm *PlaybackManager) handleStreamingTrackingStarted(status *mediaplayer.Pl
 		MediaId:       pm.currentStreamMedia.MustGet().GetID(),
 		Filepath:      "",
 	})
+
+	pm.recordWatchActivity(pm.currentStreamMedia.MustGet().GetID(), pm.currentStreamEpisode.MustGet().GetProgressNumber())
 
 	// ------- Discord ------- //
 	if pm.discordPresence != nil && !pm.isOfflineRef.Get() {
@@ -682,5 +689,19 @@ func (pm *PlaybackManager) updateProgress() (err error) {
 
 	pm.Logger.Info().Msg("playback manager: Updated progress on AniList")
 
+	pm.recordWatchActivity(mediaId, epNum)
+
 	return nil
+}
+
+// recordWatchActivity stores the media as recently watched through Seanime.
+// This feeds the "Recently watched" sorting, so it is best-effort and never interrupts playback tracking.
+func (pm *PlaybackManager) recordWatchActivity(mediaId int, episodeNumber int) {
+	if pm.Database == nil || mediaId == 0 {
+		return
+	}
+
+	if err := pm.Database.UpsertMediaWatchActivity(mediaId, episodeNumber); err != nil {
+		pm.Logger.Warn().Err(err).Int("mediaId", mediaId).Msg("playback manager: Failed to record watch activity")
+	}
 }

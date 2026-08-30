@@ -326,6 +326,20 @@ type SilencedMediaEntry struct {
 }
 
 // +---------------------+
+// |   Watch Activity    |
+// +---------------------+
+
+// MediaWatchActivity records the last time a media was played or had its progress updated through Seanime.
+// One row per media; the ID is the AniList media ID.
+type MediaWatchActivity struct {
+	BaseModel
+	// Episode (or chapter) number that was being watched when the activity was last recorded.
+	EpisodeNumber int `json:"episodeNumber"`
+	// Timestamp of the last recorded activity.
+	LastWatchedAt time.Time `json:"lastWatchedAt"`
+}
+
+// +---------------------+
 // |        Theme        |
 // +---------------------+
 

@@ -651,6 +651,11 @@ func (h *Handler) HandleUpdateAnimeEntryProgress(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	// Record the media as recently watched through Seanime (best-effort)
+	if err := h.App.Database.UpsertMediaWatchActivity(b.MediaId, b.EpisodeNumber); err != nil {
+		h.App.Logger.Warn().Err(err).Msg("handlers: Failed to record watch activity")
+	}
+
 	_, _ = h.App.RefreshAnimeCollection() // Refresh the AniList collection
 
 	return h.RespondWithData(c, true)

@@ -1,8 +1,12 @@
 import { AL_AnimeCollection_MediaListCollection_Lists } from "@/api/generated/types"
 import { useGetRawAnimeCollection, useGetRawAnimeCollectionTags } from "@/api/hooks/anilist.hooks"
+import { useGetLibraryCollection } from "@/api/hooks/anime_collection.hooks"
 import { useGetRawAnilistMangaCollection, useGetRawAnilistMangaCollectionTags } from "@/api/hooks/manga.hooks"
+import { useGetMangaDownloadsList } from "@/api/hooks/manga_download.hooks"
+import { useGetMediaWatchActivity } from "@/api/hooks/watch_activity.hooks"
 import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
-import { CollectionParams, CollectionType, DEFAULT_COLLECTION_PARAMS, filterEntriesByTitle, filterListEntries } from "@/lib/helpers/filtering"
+import { CollectionParams, CollectionType, DEFAULT_COLLECTION_PARAMS, filterEntriesByTitle, filterMyListsEntries } from "@/lib/helpers/filtering"
+import { buildWatchActivityMap } from "@/lib/helpers/my-lists-filtering"
 import { atomWithImmer } from "jotai-immer"
 import { useAtom } from "jotai/react"
 import React from "react"
@@ -29,6 +33,28 @@ export function useHandleUserAnilistLists(debouncedSearchInput: string, type?: "
     const { data: mangaData } = useGetRawAnilistMangaCollection()
     const { data: animeTagMap } = useGetRawAnimeCollectionTags()
     const { data: mangaTagMap } = useGetRawAnilistMangaCollectionTags()
+
+    const activeType = type ?? selectedType
+
+    // Local content ("Local only" filter): library files for anime, downloaded chapters for manga
+    const { data: libraryCollection } = useGetLibraryCollection()
+    const { data: mangaDownloadsList } = useGetMangaDownloadsList({
+        enabled: !!serverStatus?.settings?.library?.enableManga && activeType === "manga",
+    })
+    // Watch activity recorded by Seanime ("Recently watched" sorting)
+    const { data: watchActivities } = useGetMediaWatchActivity()
+
+    const localMediaIds = React.useMemo(() => {
+        if (activeType === "anime") {
+            if (!libraryCollection) return undefined
+            const entries = libraryCollection.lists?.flatMap(list => list.entries ?? []) ?? []
+            return new Set(entries.filter(entry => !!entry.libraryData).map(entry => entry.mediaId))
+        }
+        if (!mangaDownloadsList) return undefined
+        return new Set(mangaDownloadsList.map(item => item.mediaId))
+    }, [activeType, libraryCollection, mangaDownloadsList])
+
+    const watchActivity = React.useMemo(() => buildWatchActivityMap(watchActivities), [watchActivities])
 
     const data = React.useMemo(() => {
         if (type) {
@@ -61,12 +87,14 @@ export function useHandleUserAnilistLists(debouncedSearchInput: string, type?: "
     const _filteredLists: AL_AnimeCollection_MediaListCollection_Lists[] = React.useMemo(() => {
         return lists?.map(obj => {
             if (!obj) return undefined
-            const arr = filterListEntries(
+            const arr = filterMyListsEntries(
                 selectedType as CollectionType,
                 obj?.entries,
                 params,
                 serverStatus?.settings?.anilist?.enableAdultContent,
                 mediaTagMap,
+                localMediaIds,
+                watchActivity,
             )
             return {
                 name: obj?.name,
@@ -75,7 +103,7 @@ export function useHandleUserAnilistLists(debouncedSearchInput: string, type?: "
                 entries: arr,
             }
         }).filter(Boolean) ?? []
-    }, [lists, debouncedParams, mediaTagMap, selectedType, serverStatus?.settings?.anilist?.enableAdultContent])
+    }, [lists, debouncedParams, mediaTagMap, selectedType, serverStatus?.settings?.anilist?.enableAdultContent, localMediaIds, watchActivity])
 
     const filteredLists: AL_AnimeCollection_MediaListCollection_Lists[] = React.useMemo(() => {
         return _filteredLists?.map(obj => {

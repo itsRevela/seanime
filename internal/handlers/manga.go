@@ -486,6 +486,11 @@ func (h *Handler) HandleUpdateMangaProgress(c echo.Context) error {
 		return h.RespondWithError(c, err)
 	}
 
+	// Record the manga as recently read through Seanime (best-effort)
+	if err := h.App.Database.UpsertMediaWatchActivity(b.MediaId, b.ChapterNumber); err != nil {
+		h.App.Logger.Warn().Err(err).Msg("handlers: Failed to record watch activity")
+	}
+
 	_, _ = h.App.RefreshMangaCollection() // Refresh the AniList collection
 
 	return h.RespondWithData(c, true)

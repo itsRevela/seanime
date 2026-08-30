@@ -22,6 +22,8 @@ export function useAnimeCollectionListener() {
                 await qc.invalidateQueries({ queryKey: [API_ENDPOINTS.ANIME_ENTRIES.GetMissingEpisodes.key] })
                 await qc.invalidateQueries({ queryKey: [API_ENDPOINTS.ANIME_COLLECTION.GetAnimeCollectionSchedule.key] })
                 await qc.invalidateQueries({ queryKey: [API_ENDPOINTS.LIBRARY_EXPLORER.GetLibraryExplorerFileTree.key] })
+                // Progress updates refresh the collection, so the Seanime watch activity is refetched alongside it
+                await qc.invalidateQueries({ queryKey: [API_ENDPOINTS.WATCH_ACTIVITY.GetMediaWatchActivity.key] })
             })()
         },
     })
@@ -34,6 +36,7 @@ export function useAnimeCollectionListener() {
                 await qc.invalidateQueries({ queryKey: [API_ENDPOINTS.MANGA.GetRawAnilistMangaCollection.key] })
                 await qc.invalidateQueries({ queryKey: [API_ENDPOINTS.MANGA.GetMangaCollection.key] })
                 await qc.invalidateQueries({ queryKey: [API_ENDPOINTS.MANGA.GetMangaEntry.key] })
+                await qc.invalidateQueries({ queryKey: [API_ENDPOINTS.WATCH_ACTIVITY.GetMediaWatchActivity.key] })
             })()
         },
     })

@@ -106,6 +106,7 @@ const (
 	GetMangaMappingEndpoint                            = "MANGA-get-manga-mapping"
 	GetMarketplaceExtensionsEndpoint                   = "EXTENSIONS-get-marketplace-extensions"
 	GetMediaMetadataParentEndpoint                     = "METADATA-get-media-metadata-parent"
+	GetMediaWatchActivityEndpoint                      = "WATCH-ACTIVITY-get-media-watch-activity"
 	GetMediastreamSettingsEndpoint                     = "MEDIASTREAM-get-mediastream-settings"
 	GetMemoryProfileEndpoint                           = "STATUS-get-memory-profile"
 	GetMemoryStatsEndpoint                             = "STATUS-get-memory-stats"

@@ -1966,6 +1966,7 @@ type AnimeCollection_MediaListCollection_Lists_Entries struct {
 	Score       *float64                                                       "json:\"score,omitempty\" graphql:\"score\""
 	StartedAt   *AnimeCollection_MediaListCollection_Lists_Entries_StartedAt   "json:\"startedAt,omitempty\" graphql:\"startedAt\""
 	Status      *MediaListStatus                                               "json:\"status,omitempty\" graphql:\"status\""
+	UpdatedAt   *int                                                           "json:\"updatedAt,omitempty\" graphql:\"updatedAt\""
 }
 
 func (t *AnimeCollection_MediaListCollection_Lists_Entries) GetCompletedAt() *AnimeCollection_MediaListCollection_Lists_Entries_CompletedAt {
@@ -2027,6 +2028,12 @@ func (t *AnimeCollection_MediaListCollection_Lists_Entries) GetStatus() *MediaLi
 		t = &AnimeCollection_MediaListCollection_Lists_Entries{}
 	}
 	return t.Status
+}
+func (t *AnimeCollection_MediaListCollection_Lists_Entries) GetUpdatedAt() *int {
+	if t == nil {
+		t = &AnimeCollection_MediaListCollection_Lists_Entries{}
+	}
+	return t.UpdatedAt
 }
 
 type AnimeCollection_MediaListCollection_Lists struct {
@@ -5853,6 +5860,7 @@ type MangaCollection_MediaListCollection_Lists_Entries struct {
 	Score       *float64                                                       "json:\"score,omitempty\" graphql:\"score\""
 	StartedAt   *MangaCollection_MediaListCollection_Lists_Entries_StartedAt   "json:\"startedAt,omitempty\" graphql:\"startedAt\""
 	Status      *MediaListStatus                                               "json:\"status,omitempty\" graphql:\"status\""
+	UpdatedAt   *int                                                           "json:\"updatedAt,omitempty\" graphql:\"updatedAt\""
 }
 
 func (t *MangaCollection_MediaListCollection_Lists_Entries) GetCompletedAt() *MangaCollection_MediaListCollection_Lists_Entries_CompletedAt {
@@ -5914,6 +5922,12 @@ func (t *MangaCollection_MediaListCollection_Lists_Entries) GetStatus() *MediaLi
 		t = &MangaCollection_MediaListCollection_Lists_Entries{}
 	}
 	return t.Status
+}
+func (t *MangaCollection_MediaListCollection_Lists_Entries) GetUpdatedAt() *int {
+	if t == nil {
+		t = &MangaCollection_MediaListCollection_Lists_Entries{}
+	}
+	return t.UpdatedAt
 }
 
 type MangaCollection_MediaListCollection_Lists struct {
@@ -8126,6 +8140,7 @@ const AnimeCollectionDocument = `query AnimeCollection ($userName: String) {
 				notes
 				repeat
 				private
+				updatedAt
 				startedAt {
 					year
 					month
@@ -9498,6 +9513,7 @@ const MangaCollectionDocument = `query MangaCollection ($userName: String) {
 				notes
 				repeat
 				private
+				updatedAt
 				startedAt {
 					year
 					month

@@ -36,6 +36,8 @@ func (vc *VideoCore) setupSharedEffects() {
 				if !ok {
 					continue
 				}
+				// Playback has started in the built-in player: record it as watch activity.
+				vc.recordWatchActivity(state.PlaybackInfo.Media.GetID(), state.PlaybackInfo.Episode.GetProgressNumber())
 				if vc.discordPresence != nil && !vc.isOfflineRef.Get() {
 					vc.logger.Debug().Msgf("videocore: Setting Discord presence for %s", state.PlaybackInfo.Media.GetPreferredTitle())
 					go vc.discordPresence.SetAnimeActivity(&discordrpc_presence.AnimeActivity{
@@ -57,6 +59,8 @@ func (vc *VideoCore) setupSharedEffects() {
 				if !ok {
 					continue
 				}
+				// The episode was watched to completion, bump the watch activity regardless of whether AniList gets updated.
+				vc.recordWatchActivity(state.PlaybackInfo.Media.GetID(), state.PlaybackInfo.Episode.GetProgressNumber())
 				shouldUpdateProgress := false
 				vc.settingsMu.RLock()
 				shouldUpdateProgress = vc.settings.Library.AutoUpdateProgress
@@ -152,4 +156,16 @@ func (vc *VideoCore) setupOnlinestreamEffects() {
 			}
 		}
 	}(subscriber)
+}
+
+// recordWatchActivity stores the media as recently watched through Seanime.
+// This feeds the "Recently watched" sorting, so it is best-effort and never interrupts playback.
+func (vc *VideoCore) recordWatchActivity(mediaId int, episodeNumber int) {
+	if vc.database == nil || mediaId == 0 {
+		return
+	}
+
+	if err := vc.database.UpsertMediaWatchActivity(mediaId, episodeNumber); err != nil {
+		vc.logger.Warn().Err(err).Int("mediaId", mediaId).Msg("videocore: Failed to record watch activity")
+	}
 }

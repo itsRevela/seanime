@@ -103,6 +103,10 @@ func (pm *PlaybackManager) StartManualProgressTracking(opts *StartManualProgress
 		Int("totalEpisodes", totalEpisodes).
 		Msg("playback manager: Starting manual progress tracking")
 
+	// Manual tracking means playback has started in an external/client player (e.g. Denshi's client-side mpv),
+	// so record it as watch activity even if the progress is never synced.
+	pm.recordWatchActivity(opts.MediaId, opts.EpisodeNumber)
+
 	// Start sending the manual tracking events
 	pm.manualTrackingWg.Add(1)
 	go func() {

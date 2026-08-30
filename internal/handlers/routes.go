@@ -255,6 +255,7 @@ func InitRoutes(app *core.App, e *echo.Echo) {
 
 	v1Library.GET("/collection", h.HandleGetLibraryCollection)
 	v1Library.GET("/schedule", h.HandleGetAnimeCollectionSchedule)
+	v1Library.GET("/watch-activity", h.HandleGetMediaWatchActivity)
 
 	v1Library.GET("/scan-summaries", h.HandleGetScanSummaries)
 

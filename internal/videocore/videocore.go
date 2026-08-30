@@ -6,6 +6,7 @@ import (
 	"seanime/internal/api/anilist"
 	"seanime/internal/api/metadata_provider"
 	"seanime/internal/continuity"
+	"seanime/internal/database/db"
 	"seanime/internal/database/models"
 	discordrpc_presence "seanime/internal/discordrpc/presence"
 	"seanime/internal/events"
@@ -33,6 +34,7 @@ type (
 		translatorService *TranslatorService
 
 		continuityManager          *continuity.Manager
+		database                   *db.Database // Used to record watch activity (can be nil in tests)
 		metadataProviderRef        *util.Ref[metadata_provider.Provider]
 		discordPresence            *discordrpc_presence.Presence
 		platformRef                *util.Ref[platform.Platform]
@@ -71,6 +73,7 @@ type (
 		Logger                     *zerolog.Logger
 		MetadataProviderRef        *util.Ref[metadata_provider.Provider]
 		ContinuityManager          *continuity.Manager
+		Database                   *db.Database
 		DiscordPresence            *discordrpc_presence.Presence
 		PlatformRef                *util.Ref[platform.Platform]
 		RefreshAnimeCollectionFunc func()
@@ -83,6 +86,7 @@ func New(opts NewVideoCoreOptions) *VideoCore {
 	vc := &VideoCore{
 		wsEventManager:              opts.WsEventManager,
 		continuityManager:           opts.ContinuityManager,
+		database:                    opts.Database,
 		discordPresence:             opts.DiscordPresence,
 		metadataProviderRef:         opts.MetadataProviderRef,
 		platformRef:                 opts.PlatformRef,

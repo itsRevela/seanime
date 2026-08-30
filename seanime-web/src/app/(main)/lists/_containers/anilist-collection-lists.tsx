@@ -26,7 +26,7 @@ import { Switch } from "@/components/ui/switch"
 import { StaticTabs } from "@/components/ui/tabs"
 import { TextInput } from "@/components/ui/text-input"
 import { useDebounce } from "@/hooks/use-debounce"
-import { COLLECTION_SORTING_OPTIONS } from "@/lib/helpers/filtering"
+import { MY_LISTS_ANIME_SORTING_OPTIONS, MY_LISTS_MANGA_SORTING_OPTIONS } from "@/lib/helpers/filtering"
 import { getYear } from "date-fns"
 import { atom } from "jotai"
 import { useAtom, useAtomValue, useSetAtom } from "jotai/react"
@@ -218,7 +218,7 @@ export function SearchOptions({
     const [input, setInput] = useAtom(watchListSearchInputAtom)
 
     const highlightTrash = React.useMemo(() => {
-        return !(!input.length && params.sorting === "SCORE_DESC" && (params.tags === null || !params.tags.length) && (params.genre === null || !params.genre.length) && params.status === null && params.format === null && params.season === null && params.year === null && params.isAdult === false)
+        return !(!input.length && params.sorting === "SCORE_DESC" && (params.tags === null || !params.tags.length) && (params.genre === null || !params.genre.length) && params.status === null && params.format === null && params.season === null && params.year === null && params.isAdult === false && params.localOnly === false)
     }, [params, input])
 
     return (
@@ -256,6 +256,7 @@ export function SearchOptions({
                             season: null,
                             year: null,
                             isAdult: false,
+                            localOnly: false,
                         }))
                         setInput("")
                     }}
@@ -312,7 +313,7 @@ export function SearchOptions({
                     className="w-full"
                     fieldClass="flex items-center"
                     inputContainerClass="w-full"
-                    options={COLLECTION_SORTING_OPTIONS}
+                    options={pageType === "manga" ? MY_LISTS_MANGA_SORTING_OPTIONS : MY_LISTS_ANIME_SORTING_OPTIONS}
                     value={params.sorting || "SCORE_DESC"}
                     onValueChange={v => setParams(draft => {
                         draft.sorting = v as any
@@ -384,15 +385,30 @@ export function SearchOptions({
                 />
             </div>
 
-            {serverStatus?.settings?.anilist?.enableAdultContent && <Switch
-                label="Adult"
-                value={params.isAdult}
-                onValueChange={v => setParams(draft => {
-                    draft.isAdult = v
-                    return
-                })}
-                fieldLabelClass="hidden"
-            />}
+            <div className="flex flex-wrap gap-6 items-center" data-anilist-collection-lists-search-options-switches>
+                <Switch
+                    label="Local only"
+                    moreHelp={pageType === "manga"
+                        ? "Only show entries with downloaded chapters"
+                        : "Only show entries with files in your library"}
+                    value={params.localOnly}
+                    onValueChange={v => setParams(draft => {
+                        draft.localOnly = v
+                        return
+                    })}
+                    fieldLabelClass="hidden"
+                />
+
+                {serverStatus?.settings?.anilist?.enableAdultContent && <Switch
+                    label="Adult"
+                    value={params.isAdult}
+                    onValueChange={v => setParams(draft => {
+                        draft.isAdult = v
+                        return
+                    })}
+                    fieldLabelClass="hidden"
+                />}
+            </div>
 
         </AppLayoutStack>
     )

@@ -12,6 +12,7 @@ query AnimeCollection ($userName: String) {
         notes
         repeat
         private
+        updatedAt
         startedAt {
           year
           month

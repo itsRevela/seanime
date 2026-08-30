@@ -2967,6 +2967,15 @@
         "required": false,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "UpdatedAt",
+        "jsonName": "updatedAt",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": false,
+        "public": true,
+        "comments": []
       }
     ],
     "comments": []
@@ -8897,6 +8906,15 @@
         "typescriptType": "AL_MediaListStatus",
         "usedTypescriptType": "AL_MediaListStatus",
         "usedStructName": "anilist.MediaListStatus",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "UpdatedAt",
+        "jsonName": "updatedAt",
+        "goType": "int",
+        "typescriptType": "number",
         "required": false,
         "public": true,
         "comments": []
@@ -15006,7 +15024,7 @@
       }
     ],
     "comments": [
-      " Page of data (Used for internal use only)"
+      " Page of data. Limited to a max depth of 5000 entries. This is calculated as the page parameter multiplied by the perPage parameter."
     ]
   },
   {
@@ -18238,6 +18256,15 @@
         "comments": []
       },
       {
+        "name": "IsPinned",
+        "jsonName": "isPinned",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
         "name": "IsPrivate",
         "jsonName": "isPrivate",
         "goType": "bool",
@@ -18692,7 +18719,7 @@
       }
     ],
     "comments": [
-      " Page of data"
+      " Page of data. Limited to a max depth of 5000 entries. This is calculated as the page parameter multiplied by the perPage parameter."
     ]
   },
   {
@@ -22063,7 +22090,7 @@
       }
     ],
     "comments": [
-      " A user's activity history stats."
+      " A user's activity history stats for the previous 6 months. Refreshes only periodically"
     ]
   },
   {
@@ -23881,7 +23908,8 @@
         "\"OTHER\"",
         "\"SOURCE\"",
         "\"COMPILATION\"",
-        "\"CONTAINS\""
+        "\"CONTAINS\"",
+        "\"SAME_UNIVERSE\""
       ]
     },
     "comments": [
@@ -24821,7 +24849,7 @@
     "comments": []
   },
   {
-    "filepath": "../internal/api/anilist/tags.go",
+    "filepath": "..\\internal\\api\\anilist\\tags.go",
     "filename": "tags.go",
     "name": "MediaTagMap",
     "formattedName": "AL_MediaTagMap",
@@ -27845,7 +27873,7 @@
     "comments": []
   },
   {
-    "filepath": "../internal/continuity/history.go",
+    "filepath": "..\\internal\\continuity\\history.go",
     "filename": "history.go",
     "name": "WatchHistory",
     "formattedName": "Continuity_WatchHistory",
@@ -30757,7 +30785,7 @@
     "comments": []
   },
   {
-    "filepath": "../internal/database/models/models.go",
+    "filepath": "..\\internal\\database\\models\\models.go",
     "filename": "models.go",
     "name": "LibraryPaths",
     "formattedName": "Models_LibraryPaths",
@@ -30873,7 +30901,7 @@
     "comments": []
   },
   {
-    "filepath": "../internal/database/models/models.go",
+    "filepath": "..\\internal\\database\\models\\models.go",
     "filename": "models.go",
     "name": "IntSlice",
     "formattedName": "Models_IntSlice",
@@ -31741,6 +31769,41 @@
     "package": "models",
     "fields": [],
     "comments": [],
+    "embeddedStructNames": [
+      "models.BaseModel"
+    ]
+  },
+  {
+    "filepath": "../internal/database/models/models.go",
+    "filename": "models.go",
+    "name": "MediaWatchActivity",
+    "formattedName": "Models_MediaWatchActivity",
+    "package": "models",
+    "fields": [
+      {
+        "name": "EpisodeNumber",
+        "jsonName": "episodeNumber",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "LastWatchedAt",
+        "jsonName": "lastWatchedAt",
+        "goType": "time.Time",
+        "typescriptType": "string",
+        "usedStructName": "time.Time",
+        "required": false,
+        "public": true,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " MediaWatchActivity records the last time a media was played or had its progress updated through Seanime.",
+      " One row per media; the ID is the AniList media ID."
+    ],
     "embeddedStructNames": [
       "models.BaseModel"
     ]
@@ -33078,7 +33141,7 @@
     ]
   },
   {
-    "filepath": "../internal/database/models/models.go",
+    "filepath": "..\\internal\\database\\models\\models.go",
     "filename": "models.go",
     "name": "StringSlice",
     "formattedName": "Models_StringSlice",
@@ -36523,6 +36586,24 @@
       {
         "name": "currentPlaybackClient",
         "jsonName": "currentPlaybackClient",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "replacedPlaybackId",
+        "jsonName": "replacedPlaybackId",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "replacedPlaybackClient",
+        "jsonName": "replacedPlaybackClient",
         "goType": "string",
         "typescriptType": "string",
         "required": true,
@@ -57380,7 +57461,7 @@
     ]
   },
   {
-    "filepath": "../internal/local/database_models.go",
+    "filepath": "..\\internal\\local\\database_models.go",
     "filename": "database_models.go",
     "name": "StringMap",
     "formattedName": "Local_StringMap",
@@ -57394,7 +57475,7 @@
     "comments": null
   },
   {
-    "filepath": "../internal/local/database_models.go",
+    "filepath": "..\\internal\\local\\database_models.go",
     "filename": "database_models.go",
     "name": "LocalMangaChapterContainers",
     "formattedName": "Local_LocalMangaChapterContainers",
@@ -58866,7 +58947,7 @@
     "comments": []
   },
   {
-    "filepath": "../internal/manga/download.go",
+    "filepath": "..\\internal\\manga\\download.go",
     "filename": "download.go",
     "name": "MediaMap",
     "formattedName": "Manga_MediaMap",
@@ -58881,7 +58962,7 @@
     "comments": null
   },
   {
-    "filepath": "../internal/manga/download.go",
+    "filepath": "..\\internal\\manga\\download.go",
     "filename": "download.go",
     "name": "ProviderDownloadMap",
     "formattedName": "Manga_ProviderDownloadMap",
@@ -59309,7 +59390,7 @@
     "comments": []
   },
   {
-    "filepath": "../internal/manga/downloader/chapter_downloader.go",
+    "filepath": "..\\internal\\manga\\downloader\\chapter_downloader.go",
     "filename": "chapter_downloader.go",
     "name": "Registry",
     "formattedName": "ChapterDownloader_Registry",
@@ -65354,6 +65435,53 @@
         "required": true,
         "public": false,
         "comments": []
+      },
+      {
+        "name": "audioPaddingMu",
+        "jsonName": "audioPaddingMu",
+        "goType": "sync.RWMutex",
+        "typescriptType": "RWMutex",
+        "usedTypescriptType": "RWMutex",
+        "usedStructName": "sync.RWMutex",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "audioLastPts",
+        "jsonName": "audioLastPts",
+        "goType": "float64",
+        "typescriptType": "number",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "audioOutputRate",
+        "jsonName": "audioOutputRate",
+        "goType": "int",
+        "typescriptType": "number",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "audioOutputChans",
+        "jsonName": "audioOutputChans",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "audioOutputBitrate",
+        "jsonName": "audioOutputBitrate",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
       }
     ],
     "comments": [
@@ -65445,6 +65573,42 @@
         "jsonName": "OutPathFmt",
         "goType": "",
         "typescriptType": "any",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "AudioLastPts",
+        "jsonName": "AudioLastPts",
+        "goType": "float64",
+        "typescriptType": "number",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "AudioOutputChans",
+        "jsonName": "AudioOutputChans",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "AudioOutputBitrate",
+        "jsonName": "AudioOutputBitrate",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "AudioOutputRate",
+        "jsonName": "AudioOutputRate",
+        "goType": "int",
+        "typescriptType": "number",
         "required": true,
         "public": true,
         "comments": []
@@ -66268,6 +66432,15 @@
         "required": false,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "ForceStreamType",
+        "jsonName": "forceStreamType",
+        "goType": "bool",
+        "typescriptType": "boolean",
+        "required": false,
+        "public": true,
+        "comments": []
       }
     ],
     "comments": []
@@ -66315,6 +66488,17 @@
         "typescriptType": "MediaInfoExtractor",
         "usedTypescriptType": "MediaInfoExtractor",
         "usedStructName": "videofile.MediaInfoExtractor",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "attachmentExtractor",
+        "jsonName": "attachmentExtractor",
+        "goType": "videofile.AttachmentExtractor",
+        "typescriptType": "AttachmentExtractor",
+        "usedTypescriptType": "AttachmentExtractor",
+        "usedStructName": "videofile.AttachmentExtractor",
         "required": false,
         "public": false,
         "comments": []
@@ -67431,6 +67615,79 @@
     "comments": [],
     "embeddedStructNames": [
       "transcoder.Stream"
+    ]
+  },
+  {
+    "filepath": "../internal/mediastream/videofile/extractor.go",
+    "filename": "extractor.go",
+    "name": "AttachmentExtractor",
+    "formattedName": "AttachmentExtractor",
+    "package": "videofile",
+    "fields": [
+      {
+        "name": "mu",
+        "jsonName": "mu",
+        "goType": "sync.Mutex",
+        "typescriptType": "Mutex",
+        "usedTypescriptType": "Mutex",
+        "usedStructName": "sync.Mutex",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "jobs",
+        "jsonName": "jobs",
+        "goType": "map[string]extractionJob",
+        "typescriptType": "Record\u003cstring, extractionJob\u003e",
+        "usedTypescriptType": "extractionJob",
+        "usedStructName": "videofile.extractionJob",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "logger",
+        "jsonName": "logger",
+        "goType": "zerolog.Logger",
+        "typescriptType": "Logger",
+        "usedTypescriptType": "Logger",
+        "usedStructName": "zerolog.Logger",
+        "required": false,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "cacheDir",
+        "jsonName": "cacheDir",
+        "goType": "string",
+        "typescriptType": "string",
+        "required": true,
+        "public": false,
+        "comments": []
+      },
+      {
+        "name": "extractionTimeout",
+        "jsonName": "extractionTimeout",
+        "goType": "time.Duration",
+        "typescriptType": "Duration",
+        "usedTypescriptType": "Duration",
+        "usedStructName": "time.Duration",
+        "required": false,
+        "public": false,
+        "comments": []
+      }
+    ],
+    "comments": [
+      " AttachmentExtractor coordinates background extraction of MKV attachments",
+      " (subtitles + fonts) so that the API request that triggered the extraction",
+      " can return immediately instead of blocking for the 30-200s it takes ffmpeg",
+      " to walk a 1-2 GB file over shfs FUSE. Subtitle / font serving handlers wait",
+      " on the per-hash completion channel before responding.",
+      "",
+      " Deduplicates concurrent requests for the same hash so multiple clients (or",
+      " the same client retrying through a React remount loop) don't stack ffmpeg",
+      " invocations against the same file."
     ]
   },
   {
@@ -70787,7 +71044,7 @@
     "comments": []
   },
   {
-    "filepath": "../internal/nakama/share.go",
+    "filepath": "..\\internal\\nakama\\share.go",
     "filename": "share.go",
     "name": "NakamaCustomSourceMap",
     "formattedName": "Nakama_NakamaCustomSourceMap",
@@ -96614,6 +96871,19 @@
         "comments": []
       },
       {
+        "name": "database",
+        "jsonName": "database",
+        "goType": "db.Database",
+        "typescriptType": "DB_Database",
+        "usedTypescriptType": "DB_Database",
+        "usedStructName": "db.Database",
+        "required": false,
+        "public": false,
+        "comments": [
+          " Used to record watch activity (can be nil in tests)"
+        ]
+      },
+      {
         "name": "metadataProviderRef",
         "jsonName": "metadataProviderRef",
         "goType": "",
@@ -96895,6 +97165,17 @@
         "typescriptType": "Continuity_Manager",
         "usedTypescriptType": "Continuity_Manager",
         "usedStructName": "continuity.Manager",
+        "required": false,
+        "public": true,
+        "comments": []
+      },
+      {
+        "name": "Database",
+        "jsonName": "Database",
+        "goType": "db.Database",
+        "typescriptType": "DB_Database",
+        "usedTypescriptType": "DB_Database",
+        "usedStructName": "db.Database",
         "required": false,
         "public": true,
         "comments": []
