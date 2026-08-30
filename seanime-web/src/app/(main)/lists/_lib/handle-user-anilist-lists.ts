@@ -25,7 +25,17 @@ export const __myListsSearch_paramsInputAtom = atomWithImmer<CollectionParams<"a
 
 export const __myLists_selectedTypeAtom = atomWithImmer<"anime" | "manga" | "stats">("anime")
 
-export function useHandleUserAnilistLists(debouncedSearchInput: string, type?: "anime" | "manga") {
+/**
+ * Params that can be pinned by a caller instead of using the My Lists page atoms
+ * (used by the "My Lists" home item, whose options are persisted server-side).
+ */
+export type MyListsParamsOverride = {
+    // Only sortings valid for both anime and manga lists
+    sorting?: CollectionParams<"anime">["sorting"] & CollectionParams<"manga">["sorting"]
+    localOnly?: boolean
+}
+
+export function useHandleUserAnilistLists(debouncedSearchInput: string, type?: "anime" | "manga", paramsOverride?: MyListsParamsOverride) {
 
     const serverStatus = useServerStatus()
     const [selectedType, setSelectedType] = useAtom(__myLists_selectedTypeAtom)
@@ -74,6 +84,17 @@ export function useHandleUserAnilistLists(debouncedSearchInput: string, type?: "
     const [params, _setParams] = useAtom(__myListsSearch_paramsAtom)
     const [debouncedParams] = useDebounce(params, 500)
 
+    // With an override (home item), the params are pinned to the defaults + the persisted item options,
+    // otherwise they come from the My Lists page atoms
+    const effectiveParams = React.useMemo<CollectionParams<"anime"> | CollectionParams<"manga">>(() => {
+        if (!paramsOverride) return params
+        return {
+            ...MYLISTS_DEFAULT_PARAMS,
+            ...(paramsOverride.sorting ? { sorting: paramsOverride.sorting } : {}),
+            ...(paramsOverride.localOnly !== undefined ? { localOnly: paramsOverride.localOnly } : {}),
+        }
+    }, [params, !!paramsOverride, paramsOverride?.sorting, paramsOverride?.localOnly])
+
     React.useLayoutEffect(() => {
         if (selectedType === "manga" && !serverStatus?.settings?.library?.enableManga) {
             setSelectedType("anime")
@@ -81,6 +102,8 @@ export function useHandleUserAnilistLists(debouncedSearchInput: string, type?: "
     }, [serverStatus?.settings?.library?.enableManga])
 
     React.useLayoutEffect(() => {
+        // A pinned caller doesn't own the page atoms, so it must not reset them
+        if (paramsOverride) return
         _setParams(MYLISTS_DEFAULT_PARAMS)
     }, [selectedType])
 
@@ -88,9 +111,9 @@ export function useHandleUserAnilistLists(debouncedSearchInput: string, type?: "
         return lists?.map(obj => {
             if (!obj) return undefined
             const arr = filterMyListsEntries(
-                selectedType as CollectionType,
+                activeType as CollectionType,
                 obj?.entries,
-                params,
+                effectiveParams,
                 serverStatus?.settings?.anilist?.enableAdultContent,
                 mediaTagMap,
                 localMediaIds,
@@ -103,7 +126,17 @@ export function useHandleUserAnilistLists(debouncedSearchInput: string, type?: "
                 entries: arr,
             }
         }).filter(Boolean) ?? []
-    }, [lists, debouncedParams, mediaTagMap, selectedType, serverStatus?.settings?.anilist?.enableAdultContent, localMediaIds, watchActivity])
+    }, [
+        lists,
+        debouncedParams,
+        paramsOverride?.sorting,
+        paramsOverride?.localOnly,
+        mediaTagMap,
+        activeType,
+        serverStatus?.settings?.anilist?.enableAdultContent,
+        localMediaIds,
+        watchActivity,
+    ])
 
     const filteredLists: AL_AnimeCollection_MediaListCollection_Lists[] = React.useMemo(() => {
         return _filteredLists?.map(obj => {

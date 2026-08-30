@@ -940,7 +940,11 @@ function MyLists(props: { item: Models_HomeItem }) {
         completedList,
         droppedList,
         customLists,
-    } = useHandleUserAnilistLists("", item.options?.type)
+    } = useHandleUserAnilistLists("", item.options?.type, {
+        // Persisted per-item options (see HOME_ITEMS["my-lists"]); undefined falls back to the defaults
+        sorting: item.options?.sorting || undefined,
+        localOnly: !!item.options?.localOnly,
+    })
 
     const isCustomList = !!(item.options?.customListName?.trim?.()?.length)
 

@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	Version              = "3.8.26"
+	Version              = "3.8.27"
 	VersionName          = "Kanata"
 	GcTime               = time.Minute * 30
 	ConfigFileName       = "config.toml"

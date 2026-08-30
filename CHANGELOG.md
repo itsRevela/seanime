@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.27
+
+- ✨ Home: "My Lists" home item gained persistent *Sorting* and *Local only* settings
+  - The "My Lists" section (Home Settings → add item) only exposed statuses / layout / type / custom list name, and its entries silently followed whatever filter state the My Lists *page* happened to have (both read the same jotai atoms, and mounting the home screen even reset the page's params). There was no way to keep, say, a "Currently watching, local only, most recently watched first" section on the home screen.
+  - `HOME_ITEMS["my-lists"]` (`home-items.utils.ts`) now has a `sorting` select (Recently watched / read, Least recently watched / read, then the usual score / title / progress / date options) and a `localOnly` checkbox. Both are saved with the item like every other home-item option (server-side, in the theme's `home_items` JSON via `POST /status/home-items`), so they survive reloads and other devices. The schema version is intentionally unchanged so existing "My Lists" items keep their current options; the new fields simply default to "Highest score" / off.
+  - `useHandleUserAnilistLists` accepts an optional `paramsOverride` (`{ sorting?, localOnly? }`). When given, the hook pins its params to the My Lists defaults + the override instead of the page atoms, and no longer resets those atoms on mount — the home section is now independent of the My Lists page's filters. The page itself is unchanged.
+  - The home-item options modal learned a `checkbox` field type (rendered with the shared `Checkbox` component) since none existed before.
+
 ## v3.8.26
 
 - ✨ My Lists: "Recently watched" sort order driven by what was actually played through Seanime

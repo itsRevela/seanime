@@ -1,5 +1,6 @@
 import { Models_HomeItem, Nullish } from "@/api/generated/types"
 import { ADVANCED_SEARCH_COUNTRIES_MANGA, ADVANCED_SEARCH_MEDIA_GENRES } from "@/app/(main)/search/_lib/advanced-search-constants"
+import { COLLECTION_SORTING_OPTIONS } from "@/lib/helpers/filtering"
 
 export const DEFAULT_HOME_ITEMS: Models_HomeItem[] = [
     {
@@ -312,6 +313,21 @@ export const HOME_ITEMS = {
                 label: "Custom list name (Optional)",
                 type: "text",
                 name: "customListName",
+            },
+            {
+                label: "Sorting",
+                name: "sorting",
+                type: "select",
+                options: [
+                    { label: "Recently watched / read", value: "RECENTLY_WATCHED_DESC" },
+                    { label: "Least recently watched / read", value: "RECENTLY_WATCHED" },
+                    ...COLLECTION_SORTING_OPTIONS,
+                ],
+            },
+            {
+                label: "Local only",
+                name: "localOnly",
+                type: "checkbox",
             },
         ],
     },

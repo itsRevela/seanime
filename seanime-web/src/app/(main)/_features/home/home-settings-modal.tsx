@@ -8,6 +8,7 @@ import { DEFAULT_HOME_ITEMS, HOME_ITEM_IDS, HOME_ITEMS } from "@/app/(main)/_fea
 import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { uuidv4 } from "@/app/websocket-provider"
 import { Button, IconButton } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/components/ui/core/styling"
 import { LoadingSpinner } from "@/components/ui/loading-spinner"
 import { Modal } from "@/components/ui/modal"
@@ -613,6 +614,15 @@ function OptionField({ option, value, onChange }: OptionFieldProps) {
     }
 
     switch (type) {
+        case "checkbox":
+            return (
+                <Checkbox
+                    label={label}
+                    value={!!value}
+                    onValueChange={(checked) => onChange(checked === true)}
+                />
+            )
+
         case "text":
             return (
                 <div className="space-y-2">
