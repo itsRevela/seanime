@@ -1486,36 +1486,25 @@ app.whenReady().then(async () => {
     })
 
     // Setup IPC handlers for update functions
+    // Updates are fully disabled in this fork (see the autoUpdater.autoDownload
+    // comment above). These handlers used to allow a manual check, but the
+    // renderer's update modal auto-invokes "check-for-updates" on startup and
+    // the configured feed points at UPSTREAM's releases — so a "successful"
+    // check would announce upstream versions and an install would replace this
+    // fork's build with upstream's. Both handlers are now inert: no network
+    // request is ever made and the modal never sees an available update.
     ipcMain.handle("check-for-updates", async () => {
-        try {
-            console.log("[Main] Checking for updates...")
-            const result = await autoUpdater.checkForUpdates()
-            return {
-                updateAvailable: !!result?.updateInfo,
-                updateInfo: result?.updateInfo,
-                updateDownloaded: updateDownloaded
-            }
-        } catch (error) {
-            console.error("[Main] Error checking for updates:", error)
-            throw error
+        console.log("[Main] Update check requested — updates are disabled in this fork")
+        return {
+            updateAvailable: false,
+            updateInfo: null,
+            updateDownloaded: false,
         }
     })
 
     ipcMain.handle("install-update", async () => {
-        try {
-            if (!updateDownloaded) {
-                console.log("[Main] Update not downloaded yet, triggering download...")
-                // Trigger download if not already downloaded
-                await autoUpdater.checkForUpdatesAndNotify()
-                throw new Error("Update download initiated. Please wait for download to complete.")
-            }
-            console.log("[Main] Installing update...")
-            autoUpdater.quitAndInstall(false, true)
-            return true
-        } catch (error) {
-            console.error("[Main] Error installing update:", error)
-            throw error
-        }
+        console.log("[Main] Update install requested — updates are disabled in this fork")
+        throw new Error("Updates are disabled in this Seanime fork. Install a new build manually.")
     })
 
     ipcMain.handle("kill-server", async () => {

@@ -1,4 +1,5 @@
 import { useUpdateContinuityWatchHistoryItem } from "@/api/hooks/continuity.hooks"
+import { getServerBaseUrl } from "@/api/client/server-url"
 import {
     usePlaybackCancelManualTracking,
     usePlaybackStartManualTracking,
@@ -213,7 +214,11 @@ export function useLaunchClientMpv() {
         // but we await each one to keep the code path uniform).
         const buildFileUrl = async (filePath: string): Promise<string> => {
             const encodedPath = encodeURIComponent(filePath)
-            let url = `${window.location.origin}/api/v1/mediastream/file?path=${encodedPath}&client=${encodeURIComponent(clientId ?? "")}`
+            // Use the real server base URL, never window.location.origin: in
+            // local Denshi the UI is served over the internal app:// protocol,
+            // which mpv cannot open ("No protocol handler found"). The remote
+            // case is unaffected since there the origin IS the server URL.
+            let url = `${getServerBaseUrl()}/api/v1/mediastream/file?path=${encodedPath}&client=${encodeURIComponent(clientId ?? "")}`
             if (serverStatus?.serverHasPassword) {
                 // HMAC tokens are scoped to the endpoint path, not the
                 // query string. The "&" symbol tells getHMACTokenQueryParam

@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.28
+
+- 🐛 Denshi + VideoCore: Client-mpv now works with a local (self-contained) Denshi install
+  - `useLaunchClientMpv` built the mediastream URL with `window.location.origin`. In remote-server Denshi (this fork's original client-mpv topology) the UI is loaded from the server, so the origin was a real `http://<server>` address and everything worked. But a self-contained Denshi serves its bundled UI over the internal Electron `app://` protocol — mpv was handed `app://-/api/v1/mediastream/file?...`, printed "No protocol handler found to open URL", and exited with code 2 before ever binding its IPC pipe. The launcher's connect loop then surfaced the misleading "mpv started but its IPC socket did not become ready".
+  - `client-mpv.ts` now builds the URL with `getServerBaseUrl()` (the same resolver every API call uses: `http://127.0.0.1:43211` in the Denshi bundle, the page origin in the server-served bundle), so both topologies get a URL mpv can open.
+- 🦺 Denshi: mpv launch failures are now diagnosable and cold starts survive
+  - `MpvSession.start()` waited only 8×250 ms (~2 s) for the IPC pipe — too tight for a first-ever mpv launch on a fresh machine (AV scan, font cache). The window is now 30×500 ms (~15 s); warm launches still connect on the first attempt.
+  - The session records mpv's exit code (`procExitCode`); if mpv dies before the pipe exists, the connect loop aborts immediately and the error says "mpv exited (code N) before its IPC socket became ready" instead of the generic socket message that sent this debugging session down the wrong path.
+- 🦺 Denshi: Update checks are now fully inert
+  - v3.8.18's disable turned off auto-download/auto-install, but the renderer's update modal still auto-invoked the `check-for-updates` IPC handler on startup, which queried the configured feed — which points at UPSTREAM's releases. Result on a fresh install: "A new update is available!" announcing upstream 3.10.2 with a download forever stuck at 0% (autoDownload=false), and a manual install attempt could have replaced the fork with upstream's build.
+  - The `check-for-updates` and `install-update` IPC handlers no longer touch electron-updater at all: the former always reports no update, the latter throws "Updates are disabled in this Seanime fork". No network request is made and the modal never appears.
+
 ## v3.8.27
 
 - ✨ Home: "My Lists" home item gained persistent *Sorting* and *Local only* settings

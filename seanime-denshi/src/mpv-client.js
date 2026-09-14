@@ -193,6 +193,9 @@ class MpvSession {
         this.lastEmittedAt = 0
         this.connected = false
         this.killed = false
+        // Set to mpv's exit code as soon as the process dies; undefined while
+        // it runs. Used to abort the IPC connect loop on early exits.
+        this.procExitCode = undefined
     }
 
     async start() {
@@ -252,6 +255,11 @@ class MpvSession {
 
         this.proc.on("exit", (code, signal) => {
             this.onLog("info", `mpv exited code=${code} signal=${signal}`)
+            // Remember early deaths so the connect loop can bail out with a
+            // useful error instead of retrying against a pipe that will
+            // never exist (mpv only binds the IPC socket after it accepts
+            // the file/URL it was given).
+            this.procExitCode = code ?? -1
             // EOF set before exit means natural completion (user watched to
             // the end). If mpv was killed externally or closed mid-stream
             // the eof flag stays false.
@@ -262,9 +270,17 @@ class MpvSession {
 
         // The IPC socket isn't ready immediately after spawn — mpv binds
         // it asynchronously during startup. Retry with backoff until the
-        // pipe accepts a connection or we hit a hard timeout.
-        await this.connectWithRetry(8, 250)
+        // pipe accepts a connection or we hit a hard timeout. The window
+        // is generous (~15s) because a first-ever mpv launch on a fresh
+        // machine (AV scan, font cache) can take several seconds; when mpv
+        // is warm the first attempt succeeds and no time is wasted.
+        await this.connectWithRetry(30, 500)
         if (!this.connected) {
+            if (this.procExitCode !== undefined) {
+                // mpv died before ever creating the pipe — surface that,
+                // it's a different failure than a slow/blocked socket.
+                throw new Error(`mpv exited (code ${this.procExitCode}) before its IPC socket became ready — check the mpv output in the logs`)
+            }
             this.onLog("warn", "mpv IPC connect timed out; killing")
             this.kill()
             throw new Error("mpv started but its IPC socket did not become ready")
@@ -280,6 +296,11 @@ class MpvSession {
                 return
             } catch (err) {
                 if (this.killed) return
+                // mpv already exited: the pipe will never appear, stop retrying.
+                if (this.procExitCode !== undefined) {
+                    this.onLog("warn", `IPC connect aborted, mpv already exited (code ${this.procExitCode})`)
+                    return
+                }
                 if (i === attempts - 1) {
                     this.onLog("warn", `final IPC connect failed: ${err.message}`)
                     return
