@@ -104,7 +104,8 @@
 <div class="callout blue">
     <b>Optional — buffering/tuning flags:</b> once everything works, you can put this proven set into <b>“Extra mpv args”</b>:<br>
     <code>--cache=yes --cache-secs=300 --demuxer-readahead-secs=60 --demuxer-max-bytes=2GiB --network-timeout=60</code><br>
-    It buffers up to 5 minutes / 2&nbsp;GiB ahead and tolerates slow reads — mainly useful when mpv streams over a network (remote server, slow NAS). On an all-local setup like this one it's optional; add it if you ever see stutter on high-bitrate files. If mpv stops launching after editing this field, clear it first — a typo here is the #1 cause.
+    It buffers up to 5 minutes / 2&nbsp;GiB ahead and tolerates slow reads — mainly useful when mpv streams over a network (remote server, slow NAS). On an all-local setup like this one it's optional; add it if you ever see stutter on high-bitrate files.<br>
+    <b>Type these flags in by hand — do not copy them out of this PDF.</b> PDF copy-paste often turns the double hyphens (<code>--</code>) into a dash character mpv doesn't understand, and a single bad flag makes mpv exit instantly with “mpv exited (code 1)”. If mpv stops launching after editing this field, clear it first.
 </div>
 
 <h2><span class="step">3</span>ffmpeg — transcoding &amp; LAN streaming</h2>
