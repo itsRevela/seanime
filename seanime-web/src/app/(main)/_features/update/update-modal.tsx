@@ -69,7 +69,8 @@ export function UpdateModal(props: UpdateModalProps) {
     }
 
     function handleInstallUpdate() {
-        installUpdate({ fallback_destination: "" })
+        // Self-update is disabled in this fork; the server refuses with an explicit error
+        installUpdate()
     }
 
     if (!updateModalOpen && (serverStatus?.settings?.library?.disableUpdateCheck || isLoading || !updateData || !updateData.release)) return null

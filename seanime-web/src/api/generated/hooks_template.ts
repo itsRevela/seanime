@@ -2334,7 +2334,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // export function useInstallLatestUpdate() {
-//     return useServerMutation<Status, InstallLatestUpdate_Variables>({
+//     return useServerMutation<Status>({
 //         endpoint: API_ENDPOINTS.RELEASES.InstallLatestUpdate.endpoint,
 //         method: API_ENDPOINTS.RELEASES.InstallLatestUpdate.methods[0],
 //         mutationKey: [API_ENDPOINTS.RELEASES.InstallLatestUpdate.key],

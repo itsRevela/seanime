@@ -648,6 +648,9 @@ export function OnlinestreamPage({ animeEntry, animeEntryLoading, hideBackButton
                                                 language: sub.language,
                                                 default: index === 0,
                                                 useLibassRenderer: useLibassRenderer,
+                                                // Subtitle hosts are often referer-locked like the video CDN;
+                                                // the server forwards these when fetching/converting the track
+                                                headers: videoSource?.headers,
                                             })),
                                             videoSources: hasMultipleVideoSources ? videoSources?.map((source, index) => ({
                                                 index: index,

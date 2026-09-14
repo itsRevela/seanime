@@ -59,6 +59,8 @@ func (h *Handler) HandleDirectstreamConvertSubs(c echo.Context) error {
 		Url     string `json:"url"`
 		Content string `json:"content"`
 		To      string `json:"to"`
+		// Headers to send when fetching Url (e.g. Referer for locked subtitle hosts)
+		Headers map[string]string `json:"headers"`
 	}
 
 	var b body
@@ -96,7 +98,7 @@ func (h *Handler) HandleDirectstreamConvertSubs(c echo.Context) error {
 		return h.RespondWithStatusError(c, echo.ErrForbidden.Code, err)
 	}
 
-	ret, err := h.App.VideoCore.FetchAndConvertSubsTo(b.Url, to)
+	ret, err := h.App.VideoCore.FetchAndConvertSubsTo(b.Url, b.Headers, to)
 	if err != nil {
 		return h.RespondWithError(c, err)
 	}

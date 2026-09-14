@@ -2918,6 +2918,19 @@
           "typescriptType": "string",
           "required": true,
           "descriptions": []
+        },
+        {
+          "name": "Headers",
+          "jsonName": "headers",
+          "goType": "map[string]string",
+          "usedStructType": "",
+          "typescriptType": "Record\u003cstring, string\u003e",
+          "required": true,
+          "descriptions": [
+            "Headers to send when fetching Url (e.g. Referer for locked subtitle hosts)",
+            "",
+            "Headers to send when fetching Url (e.g. Referer for locked subtitle hosts)"
+          ]
         }
       ],
       "returns": "string",
@@ -9497,17 +9510,7 @@
         "POST"
       ],
       "params": [],
-      "bodyFields": [
-        {
-          "name": "FallbackDestination",
-          "jsonName": "fallback_destination",
-          "goType": "string",
-          "usedStructType": "",
-          "typescriptType": "string",
-          "required": true,
-          "descriptions": []
-        }
-      ],
+      "bodyFields": [],
       "returns": "handlers.Status",
       "returnGoType": "handlers.Status",
       "returnTypescriptType": "Status"

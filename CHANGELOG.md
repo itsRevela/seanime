@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.30
+
+- 🐛 Onlinestream: Subtitle tracks from referer-locked hosts no longer fail with "Failed to load subtitle track" (500)
+  - `POST /directstream/subs/convert-subs` fetched the subtitle file with no headers. Online-streaming subtitle hosts (e.g. megaplay's `jwcif.vyrnex.top` / `fetch.nexabloom.top`) are referer-locked like their video CDNs: the bare fetch got a 403 upstream (verified: 403 without `Referer: https://megaplay.buzz/`, 200 with), which the handler surfaced as a 500 and the player as a toast — while the video itself played fine because the HLS proxy has its own header handling.
+  - The provider's per-source headers now ride along the whole chain: `VideoSubtitleTrack`/the convert-subs body gained a `headers` field, the onlinestream page attaches `videoSource.headers` to each subtitle track, and all three conversion paths forward them (libass ASS conversion, native media-captions VTT conversion, iOS fullscreen native subtitles). `FetchAndConvertSubsTo` sets the headers on the fetch and its error now includes the upstream status code for easier triage.
+  - Cleanup from v3.8.29: `useInstallLatestUpdate` no longer references the removed request-body type of the (now inert) install-update endpoint.
+
 ## v3.8.29
 
 - 🦺 Server: Update announcements and self-update are now fully disabled in this fork

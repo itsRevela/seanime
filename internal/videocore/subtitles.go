@@ -11,13 +11,19 @@ import (
 	"github.com/imroc/req/v3"
 )
 
-func (vc *VideoCore) FetchAndConvertSubsTo(url string, to int) (string, error) {
+func (vc *VideoCore) FetchAndConvertSubsTo(url string, headers map[string]string, to int) (string, error) {
 	client := req.C()
 	client.SetTimeout(30 * time.Second)
-	resp := client.Get(url).Do()
+	// Online streaming subtitle hosts are often referer-locked like their video
+	// CDNs, so forward the headers the provider returned with the source.
+	request := client.Get(url)
+	for k, v := range headers {
+		request.SetHeader(k, v)
+	}
+	resp := request.Do()
 
 	if resp.IsErrorState() {
-		return "", errors.New("failed to fetch subtitle file")
+		return "", fmt.Errorf("failed to fetch subtitle file (status %d)", resp.GetStatusCode())
 	}
 
 	payload := resp.String()

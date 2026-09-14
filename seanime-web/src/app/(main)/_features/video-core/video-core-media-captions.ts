@@ -16,6 +16,7 @@ export type MediaCaptionsTrackInfo = {
     language: string
     type?: "vtt" | "srt" | "ssa" | "ass" | string
     default?: boolean
+    headers?: Record<string, string> // Sent by the server when fetching src (referer-locked hosts)
 }
 
 export type MediaCaptionsTrack = {
@@ -25,7 +26,7 @@ export type MediaCaptionsTrack = {
     selected: boolean
 }
 
-type FetchAndConvertToVTT = (url?: string, content?: string) => Promise<string | undefined>
+type FetchAndConvertToVTT = (url?: string, content?: string, headers?: Record<string, string>) => Promise<string | undefined>
 
 export type MediaCaptionsManagerOptions = {
     videoElement: HTMLVideoElement
@@ -283,7 +284,7 @@ export class MediaCaptionsManager extends EventTarget {
             loadFn: async () => {
                 // short circuit for vtt content
                 if (track.content && track.type === "vtt") return await parseText(track.content)
-                const vttContent = await this.fetchAndConvertToVTT(track.src, track.content)
+                const vttContent = await this.fetchAndConvertToVTT(track.src, track.content, track.headers)
                 if (!vttContent) return null
                 track.content = vttContent
                 return await parseText(vttContent)
@@ -637,7 +638,7 @@ export class MediaCaptionsManager extends EventTarget {
                     loadFn: async () => {
                         // short circuit for vtt content
                         if (track.content && track.type === "vtt") return await parseText(track.content)
-                        const vttContent = await this.fetchAndConvertToVTT(track.src, track.content)
+                        const vttContent = await this.fetchAndConvertToVTT(track.src, track.content, track.headers)
                         if (!vttContent) return null
                         track.content = vttContent
                         return await parseText(vttContent)

@@ -82,6 +82,8 @@ type VideoSubtitleTrack struct {
 	Type              *string `json:"type"` // "srt" | "vtt" | "ass" | "ssa"
 	Default           *bool   `json:"default"`
 	UseLibassRenderer *bool   `json:"useLibassRenderer"`
+	// Headers to send when fetching Src (e.g. Referer for locked subtitle hosts).
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 type VideoLibassFont struct {

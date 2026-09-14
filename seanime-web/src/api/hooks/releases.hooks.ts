@@ -1,5 +1,4 @@
 import { useServerMutation, useServerQuery } from "@/api/client/requests"
-import { InstallLatestUpdate_Variables } from "@/api/generated/endpoint.types"
 import { API_ENDPOINTS } from "@/api/generated/endpoints"
 import { Status, Updater_Update } from "@/api/generated/types"
 import { useSetServerStatus } from "@/app/(main)/_hooks/use-server-status"
@@ -16,7 +15,8 @@ export function useGetLatestUpdate(enabled: boolean) {
 
 export function useInstallLatestUpdate() {
     const setServerStatus = useSetServerStatus()
-    return useServerMutation<Status, InstallLatestUpdate_Variables>({
+    // Self-update is disabled in this fork; the endpoint always refuses, so no request body type is generated
+    return useServerMutation<Status>({
         endpoint: API_ENDPOINTS.RELEASES.InstallLatestUpdate.endpoint,
         method: API_ENDPOINTS.RELEASES.InstallLatestUpdate.methods[0],
         mutationKey: [API_ENDPOINTS.RELEASES.InstallLatestUpdate.key],

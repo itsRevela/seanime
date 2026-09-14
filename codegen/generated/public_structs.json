@@ -95292,6 +95292,15 @@
         "required": false,
         "public": true,
         "comments": []
+      },
+      {
+        "name": "Headers",
+        "jsonName": "headers",
+        "goType": "map[string]string",
+        "typescriptType": "Record\u003cstring, string\u003e",
+        "required": false,
+        "public": true,
+        "comments": []
       }
     ],
     "comments": [

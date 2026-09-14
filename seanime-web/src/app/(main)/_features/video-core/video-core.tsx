@@ -1056,9 +1056,9 @@ export function VideoCore(props: VideoCoreProps) {
                         ? serverStatus?.settings?.mediaPlayer?.vcTranslateTargetLanguage
                         : null,
                     settings: settings,
-                    fetchAndConvertToVTT: (url?: string, content?: string) => {
+                    fetchAndConvertToVTT: (url?: string, content?: string, headers?: Record<string, string>) => {
                         return new Promise((resolve, reject) => {
-                            convertSubs({ url: url ?? "", content: content ?? "", to: "vtt" }, {
+                            convertSubs({ url: url ?? "", content: content ?? "", to: "vtt", headers: headers ?? {} }, {
                                 onSuccess: (data) => resolve(data),
                                 onError: (error) => reject(error),
                             })
@@ -1090,9 +1090,10 @@ export function VideoCore(props: VideoCoreProps) {
                         ? serverStatus?.settings?.mediaPlayer?.vcTranslateTargetLanguage
                         : null,
                     settings: settings,
-                    fetchAndConvertToASS: (url?: string, content?: string) => {
+                    fetchAndConvertToASS: (url?: string, content?: string, headers?: Record<string, string>) => {
                         return new Promise((resolve, reject) => {
-                            convertSubs({ url: url ?? "", content: content ?? "", to: "ass" }, {
+                            // headers: forwarded to the server so referer-locked subtitle hosts accept the fetch
+                            convertSubs({ url: url ?? "", content: content ?? "", to: "ass", headers: headers ?? {} }, {
                                 onSuccess: (data) => resolve(data),
                                 onError: (error) => reject(error),
                             })
