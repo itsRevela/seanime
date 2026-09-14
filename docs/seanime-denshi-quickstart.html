@@ -95,8 +95,8 @@
 
 <h2><span class="step">2</span>mpv — full playback functionality</h2>
 <ol>
-    <li>Install mpv: open a terminal and run <code>winget install mpv</code> (or download a build from <b>mpv.io</b>). No admin needed.</li>
-    <li>Launch mpv once by itself (double-click <code>mpv.exe</code> or drop a video on it), then close it. This warms up Windows' first-run checks.</li>
+    <li>Install mpv: open a terminal and run <code>winget install --id shinchiro.mpv -e --source winget</code> (no admin needed). If winget ever asks which package, pick <b>“mpv (shinchiro build)”</b> — not the Microsoft Store one, and not mpv.net. (Alternatively download a build from <b>mpv.io</b>.)</li>
+    <li>Launch mpv once by itself (run <code>mpv</code> in a new terminal, or drop a video onto <code>mpv.exe</code>), then close it. This warms up Windows' first-run checks. Tip: <code>where.exe mpv</code> prints the installed path — handy for the override field below.</li>
     <li>In Seanime: <b>Settings → Playback</b> → under <i>Video playback</i>, turn on <b>“Use local mpv on this device”</b>.</li>
     <li>If mpv isn't on your PATH, fill in <b>“mpv path override”</b> with the full path to <code>mpv.exe</code> (e.g. <code>C:\Program Files\MPV Player\mpv.exe</code>). Start with <b>“Extra mpv args”</b> empty — a single bad flag there makes mpv exit instantly.</li>
 </ol>
