@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.29
+
+- 🦺 Server: Update announcements and self-update are now fully disabled in this fork
+  - The server-side updater checks UPSTREAM's releases (`5rahim/seanime`) on launch, so every fresh page load popped "A new update is available!" announcing upstream 3.10.x — versions that must never be installed over this fork. This is the server-side sibling of the Denshi electron-updater disable (v3.8.18) and renderer-check neutering (v3.8.28): `Updater.GetLatestUpdate` now always reports no update (launch modal, manual re-check, and websocket-triggered refetches all go quiet), and `POST /install-update` refuses with "self-update is disabled in this Seanime fork" instead of letting `SelfUpdater` download upstream's binary over the fork's build.
+  - Applies to every install: the unraid container, remote web UI, and self-contained Denshi installs (whose bundled server showed the same modal).
+
 ## v3.8.28
 
 - 🐛 Denshi + VideoCore: Client-mpv now works with a local (self-contained) Denshi install

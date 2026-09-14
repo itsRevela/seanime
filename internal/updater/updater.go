@@ -59,7 +59,16 @@ func New(currVersion string, logger *zerolog.Logger, wsEventManager events.WSEve
 	return ret
 }
 
+// updateAnnouncementsDisabled: this fork manages updates manually (self-built
+// Docker image / installers) and the release feed points at UPSTREAM's
+// repository, so every launch would announce upstream versions that must not
+// be installed over the fork. Never report an available update.
+const updateAnnouncementsDisabled = true
+
 func (u *Updater) GetLatestUpdate() (*Update, error) {
+	if updateAnnouncementsDisabled {
+		return nil, nil
+	}
 	if !u.checkForUpdate {
 		return nil, nil
 	}

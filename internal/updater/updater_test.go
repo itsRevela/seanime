@@ -3,38 +3,29 @@ package updater
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestUpdater_GetLatestUpdateShouldFallback(t *testing.T) {
+// Update announcements are disabled in this fork (updateAnnouncementsDisabled):
+// even when the release feed serves a newer version than the running one,
+// GetLatestUpdate must never report an available update, on any channel.
+func TestUpdater_GetLatestUpdateDisabledInFork(t *testing.T) {
 	fixture := newUpdaterTestFixture(t)
-	websiteUrl = fixture.deadAPIURL
 
+	// Running version far older than fixture.release
 	u := fixture.newUpdater("2.0.2", nil)
 	// update channel is "github"
-
 	update, err := u.GetLatestUpdate()
 	require.NoError(t, err)
-	require.NotNilf(t, update, "update should contain the latest release")
-	assert.Equal(t, fixture.release.TagName, update.Release.TagName)
-	assert.Equal(t, MajorRelease, update.Type)
-}
+	require.Nil(t, update, "fork must never announce an update")
 
-func TestUpdater_GetLatestUpdateSeanime(t *testing.T) {
-	fixture := newUpdaterTestFixture(t)
-
-	u := fixture.newUpdater("2.0.2", nil)
 	u.UpdateChannel = "seanime"
-
-	update, err := u.GetLatestUpdate()
+	update, err = u.GetLatestUpdate()
 	require.NoError(t, err)
-	require.NotNilf(t, update, "update should contain the latest release")
-	assert.Equal(t, fixture.release.TagName, update.Release.TagName)
-	assert.Equal(t, MajorRelease, update.Type)
+	require.Nil(t, update, "fork must never announce an update on the seanime channel either")
 }
 
-func TestUpdater_GetLatestUpdate(t *testing.T) {
+func TestUpdater_GetLatestUpdateSameVersion(t *testing.T) {
 	fixture := newUpdaterTestFixture(t)
 	u := fixture.newUpdater(fixture.release.Version, nil)
 	u.UpdateChannel = "seanime"

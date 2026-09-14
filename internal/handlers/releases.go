@@ -7,7 +7,6 @@ import (
 	"seanime/internal/updater"
 	"seanime/internal/util/result"
 	"strings"
-	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/labstack/echo/v4"
@@ -21,29 +20,10 @@ import (
 //	@route /api/v1/install-update [POST]
 //	@returns handlers.Status
 func (h *Handler) HandleInstallLatestUpdate(c echo.Context) error {
-	if err := h.guardPrivilegedLocalExecution(c); err != nil {
-		return err
-	}
-
-	type body struct {
-		FallbackDestination string `json:"fallback_destination"`
-	}
-	var b body
-	if err := c.Bind(&b); err != nil {
-		return h.RespondWithError(c, err)
-	}
-
-	go func() {
-		time.Sleep(2 * time.Second)
-		h.App.SelfUpdater.StartSelfUpdate(b.FallbackDestination, h.App.Updater.UpdateChannel)
-	}()
-
-	status := h.NewStatus(c)
-	status.Updating = true
-
-	time.Sleep(1 * time.Second)
-
-	return h.RespondWithData(c, status)
+	// Self-update is disabled in this fork: the release feed points at
+	// upstream, so a self-update would replace this fork's build with
+	// upstream's. Builds are updated manually (Docker image / installers).
+	return h.RespondWithError(c, fmt.Errorf("self-update is disabled in this Seanime fork; update the Docker image or install a new build manually"))
 }
 
 // HandleCheckForUpdates
