@@ -11,6 +11,11 @@ import {
     useClientMpvAvailability,
     useHasClientMpvBridge,
 } from "@/app/(main)/_features/client-mpv/client-mpv"
+import {
+    __clientMpv_anime4kModeAtom,
+    CLIENT_MPV_ANIME4K_OPTIONS,
+    ClientMpvAnime4kMode,
+} from "@/app/(main)/_features/client-mpv/client-mpv-anime4k"
 import { useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { useMediastreamActiveOnDevice } from "@/app/(main)/mediastream/_lib/mediastream.atoms"
 import { SettingsCard, SettingsPageHeader } from "@/app/(main)/settings/_components/settings-card"
@@ -18,6 +23,7 @@ import { __settings_tabAtom } from "@/app/(main)/settings/_components/settings-p
 import { Alert } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/components/ui/core/styling"
+import { Select } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { TextInput } from "@/components/ui/text-input"
 import { __isElectronDesktop__ } from "@/types/constants"
@@ -179,6 +185,7 @@ export function PlaybackSettings(props: PlaybackSettingsProps) {
                                     help="Appended verbatim to every mpv launch."
                                 />
                             </div>
+                            <ClientMpvAnime4kSettings />
                         </div>
                     </div>
                 </SettingsCard>
@@ -352,5 +359,129 @@ export function PlaybackSettings(props: PlaybackSettingsProps) {
             </div>
 
         </>
+    )
+}
+
+/**
+ * Anime4K for client-side mpv: one-click install of the official GLSL pack
+ * (downloaded by Denshi's main process into its user-data dir) plus the
+ * default mode applied at launch. In-player, CTRL+1-6 switch between modes
+ * and CTRL+0 turns Anime4K off — the dropdown here is only the startup default.
+ */
+function ClientMpvAnime4kSettings() {
+    const [mode, setMode] = useAtom(__clientMpv_anime4kModeAtom)
+    const [status, setStatus] = React.useState<"checking" | "installed" | "not-installed">("checking")
+    const [installing, setInstalling] = React.useState(false)
+    const [tag, setTag] = React.useState<string | null>(null)
+
+    // Denshi older than 3.8.31 has the mpv bridge but not the Anime4K one —
+    // render nothing rather than an install button that can't work.
+    const hasAnime4kBridge = typeof window !== "undefined" && !!window.electron?.anime4k
+
+    const refreshStatus = React.useCallback(async () => {
+        const bridge = window.electron?.anime4k
+        if (!bridge) {
+            setStatus("not-installed")
+            return
+        }
+        try {
+            const res = await bridge.status()
+            setTag(res.tag ?? null)
+            setStatus(res.ok && res.installed ? "installed" : "not-installed")
+        }
+        catch {
+            setStatus("not-installed")
+        }
+    }, [])
+
+    React.useEffect(() => {
+        refreshStatus()
+    }, [refreshStatus])
+
+    async function handleInstall() {
+        const bridge = window.electron?.anime4k
+        if (!bridge) return
+        setInstalling(true)
+        try {
+            const res = await bridge.install()
+            if (res.ok && res.installed) {
+                toast.success("Anime4K shaders installed")
+                setTag(res.tag ?? null)
+                setStatus("installed")
+            }
+            else {
+                toast.error(res.error || "Failed to install Anime4K shaders")
+            }
+        }
+        catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : "Failed to install Anime4K shaders")
+        }
+        finally {
+            setInstalling(false)
+        }
+    }
+
+    async function handleUninstall() {
+        const bridge = window.electron?.anime4k
+        if (!bridge) return
+        setInstalling(true)
+        try {
+            const res = await bridge.uninstall()
+            if (res.ok) {
+                toast.success("Anime4K shaders removed")
+                setMode("off") // don't reference shaders that no longer exist at the next launch
+                setStatus("not-installed")
+            }
+            else {
+                toast.error(res.error || "Failed to remove Anime4K shaders")
+            }
+        }
+        catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : "Failed to remove Anime4K shaders")
+        }
+        finally {
+            setInstalling(false)
+        }
+    }
+
+    if (!hasAnime4kBridge) return null
+
+    return (
+        <div className="space-y-2" data-client-mpv-anime4k-settings>
+            {status === "installed" ? (
+                <>
+                    <Select
+                        label="Anime4K upscaling"
+                        options={CLIENT_MPV_ANIME4K_OPTIONS}
+                        value={mode}
+                        onValueChange={v => setMode(v as ClientMpvAnime4kMode)}
+                        help={`Shaders installed (Anime4K ${tag ?? ""}). The selected mode applies when mpv starts; inside mpv, CTRL+a opens the preset menu, CTRL+1-6 switch modes A/B/C/A+A/B+B/C+A and CTRL+0 turns Anime4K off. HQ and CNN VL/UL variants want a decent GPU; Fast variants are for weaker machines.`}
+                    />
+                    <Button
+                        intent="gray-subtle"
+                        size="sm"
+                        loading={installing}
+                        onClick={handleUninstall}
+                    >
+                        Uninstall Anime4K shaders
+                    </Button>
+                </>
+            ) : (
+                <>
+                    <Button
+                        intent="primary-subtle"
+                        size="sm"
+                        loading={installing || status === "checking"}
+                        onClick={handleInstall}
+                    >
+                        Install Anime4K shaders for mpv
+                    </Button>
+                    <p className="text-sm text-[--muted]">
+                        Downloads the official Anime4K GLSL shaders (~3 MB) so mpv can upscale anime in real time, and adds CTRL+1-6 / CTRL+0
+                        keybindings to mpv launched by Seanime. Your own mpv configuration is not modified.
+                    </p>
+                </>
+            )}
+        </div>
     )
 }

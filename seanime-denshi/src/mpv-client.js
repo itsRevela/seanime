@@ -124,13 +124,16 @@ function makeIpcPath() {
 }
 
 class MpvSession {
-    constructor({ mpvPath, url, title, savedPosition, externalSubtitles, mpvArgs, playlist, playlistStartIndex, onState, onExited, onPlaylistChanged, onLog }) {
+    constructor({ mpvPath, url, title, savedPosition, externalSubtitles, mpvArgs, playlist, playlistStartIndex, anime4k, onState, onExited, onPlaylistChanged, onLog }) {
         this.mpvPath = mpvPath
         this.url = url
         this.title = title || null
         this.savedPosition = typeof savedPosition === "number" ? savedPosition : null
         this.externalSubtitles = Array.isArray(externalSubtitles) ? externalSubtitles : []
         this.userMpvArgs = typeof mpvArgs === "string" ? mpvArgs.split(/\s+/).filter(Boolean) : []
+        // Anime4K wiring resolved by the main process ({ luaPath, tier, shaderArg }).
+        // Passed as whole args (never whitespace-split) since paths can contain spaces.
+        this.anime4k = anime4k || null
         // Optional sibling-episode playlist: array of { url, ... } items.
         // mpv plays opts.url first (with --start applied), then we use IPC
         // to extend the playlist in both directions so mpv's < / > buttons
@@ -206,6 +209,16 @@ class MpvSession {
             "--keep-open=yes",
             ...this.userMpvArgs,
         ]
+        // Anime4K: append the generated keybinding script whenever the
+        // shaders are installed (so CTRL+0..6 works even when starting
+        // "off"), and the selected mode's shader chain when one is active.
+        if (this.anime4k && this.anime4k.luaPath) {
+            args.push(`--scripts-append=${this.anime4k.luaPath}`)
+            args.push(`--script-opts-append=seanime_anime4k-tier=${this.anime4k.tier === "fast" ? "fast" : "hq"}`)
+            if (this.anime4k.shaderArg) {
+                args.push(`--glsl-shaders=${this.anime4k.shaderArg}`)
+            }
+        }
         // Point mpv at a writable screenshot directory so `s` / `S`
         // (and `Shift+s` for "no subs") don't fail with "Error writing
         // screenshot" when mpv's CWD is Denshi's install dir.
@@ -628,6 +641,7 @@ async function launchMpv(opts) {
         mpvArgs: opts.mpvArgs || "",
         playlist: opts.playlist || [],
         playlistStartIndex: opts.playlistStartIndex,
+        anime4k: opts.anime4k || null,
         onState: opts.onState,
         onExited: (info) => {
             if (activeSession === session) activeSession = null

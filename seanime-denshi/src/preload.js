@@ -138,6 +138,16 @@ contextBridge.exposeInMainWorld(
             setProperty: (name, value) => ipcRenderer.invoke("client-mpv:setProperty", { name, value }),
         },
 
+        // Anime4K shaders for client-side mpv (download/status/resolve;
+        // see anime4k.js). install() fetches the official GLSL pack into
+        // Denshi's user-data dir; resolve(mode) returns the launch wiring.
+        anime4k: {
+            status: () => ipcRenderer.invoke("anime4k:status"),
+            install: () => ipcRenderer.invoke("anime4k:install"),
+            uninstall: () => ipcRenderer.invoke("anime4k:uninstall"),
+            resolve: (mode) => ipcRenderer.invoke("anime4k:resolve", mode),
+        },
+
         // Chromecast
         cast: {
             discover: () => ipcRenderer.invoke("cast:discover"),

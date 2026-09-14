@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.31
+
+- ✨ Denshi + VideoCore: Anime4K upscaling for client-side mpv, installable in one click
+  - **Install:** Settings → Video playback → Local mpv (Denshi) gained an "Install Anime4K shaders for mpv" button. Denshi's main process downloads the official Anime4K GLSL pack (15 shaders, pinned to bloc97/Anime4K v4.0.1, ~3 MB) into `<userData>/anime4k` with atomic writes and a `//!HOOK` sanity check per file, and generates a `seanime_anime4k.lua` control script. The user's own mpv configuration is never touched — shaders and script are only passed to mpv instances Seanime launches.
+  - **In-player controls (the whole point):** `CTRL+a` opens a preset selector menu (mpv's built-in `mp.input.select`, the same UI as the native `g-t`/`g-a` track menus; needs mpv 0.39+, falls back to an OSD hint on older builds), `CTRL+1..6` switch between modes A/B/C/A+A/B+B/C+A of the configured quality tier, and `CTRL+0` turns Anime4K off — all with OSD confirmation.
+  - **Presets:** the twelve official mode chains (HQ and Fast tiers, mirroring `GLSL_Instructions.md` at the pinned tag exactly) plus raw CNN upscalers matching the built-in web player's options: CNN 2x M / VL / UL and Denoise CNN 2x VL. The web player's GAN presets have no official mpv GLSL equivalents (WebGPU-port exclusives), so CNN 2x UL is the max-quality option in mpv.
+  - **Default mode:** a per-device dropdown next to the install button picks what applies at launch ("Off by default" still loads the keybindings, so Anime4K can be enabled mid-episode). Wiring goes through a new `anime4k` field on the launch options — passed as whole args, never whitespace-split, so shader paths with spaces survive; the tier reaches the Lua script via `--script-opts-append`.
+  - **Uninstall:** a matching one-click "Uninstall Anime4K shaders" button removes the managed directory entirely and resets the default mode to Off; launches never reference missing shaders (the launcher re-checks install status every time).
+  - Verified end-to-end: module test suite (31 assertions incl. live downloads of all 15 shaders) plus a headless real-mpv launch of the generated script and shader chains (exit 0, no script/GLSL errors).
+
 ## v3.8.30
 
 - 🐛 Onlinestream: Subtitle tracks from referer-locked hosts no longer fail with "Failed to load subtitle track" (500)

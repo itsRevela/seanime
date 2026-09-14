@@ -109,6 +109,15 @@ declare global {
                 seek: (time: number, mode?: "absolute" | "relative" | "absolute-percent") => Promise<{ ok: boolean; error?: string }>;
                 setProperty: (name: string, value: any) => Promise<{ ok: boolean; data?: any; error?: string }>;
             };
+            // Anime4K shader management for client-side mpv (Denshi
+            // downloads the official GLSL pack into its user-data dir and
+            // generates an mpv keybinding script; see seanime-denshi/src/anime4k.js).
+            anime4k?: {
+                status: () => Promise<{ ok: boolean; installed?: boolean; dir?: string; tag?: string; missing?: string[]; error?: string }>;
+                install: () => Promise<{ ok: boolean; installed?: boolean; dir?: string; tag?: string; missing?: string[]; error?: string }>;
+                uninstall: () => Promise<{ ok: boolean; installed?: boolean; dir?: string; tag?: string; missing?: string[]; error?: string }>;
+                resolve: (mode: string) => Promise<{ ok: boolean; luaPath?: string; tier?: string; shaderArg?: string | null; error?: string }>;
+            };
         };
 
         __isElectronDesktop__?: boolean;
@@ -157,6 +166,10 @@ declare global {
         // corresponds to `url` above.
         playlist?: ClientMpvPlaylistItem[];
         playlistStartIndex?: number;
+        // Anime4K wiring resolved by the Denshi main process: the generated
+        // keybinding script, quality tier for CTRL+1..6, and the initial
+        // shader chain (null when starting with Anime4K off).
+        anime4k?: { luaPath: string; tier: string; shaderArg?: string | null };
     }
 
     interface ClientMpvState {

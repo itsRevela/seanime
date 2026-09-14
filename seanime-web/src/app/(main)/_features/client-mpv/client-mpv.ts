@@ -5,6 +5,7 @@ import {
     usePlaybackStartManualTracking,
     usePlaybackSyncCurrentProgress,
 } from "@/api/hooks/playback_manager.hooks"
+import { __clientMpv_anime4kModeAtom, getClientMpvAnime4kLaunch } from "@/app/(main)/_features/client-mpv/client-mpv-anime4k"
 import { useServerHMACAuth, useServerStatus } from "@/app/(main)/_hooks/use-server-status"
 import { clientIdAtom } from "@/app/websocket-provider"
 import { logger } from "@/lib/helpers/debug"
@@ -191,6 +192,7 @@ export function useLaunchClientMpv() {
     const detection = useAtomValue(__clientMpv_detectionAtom)
     const override = useAtomValue(__clientMpv_pathOverrideAtom)
     const extraArgs = useAtomValue(__clientMpv_extraArgsAtom)
+    const anime4kMode = useAtomValue(__clientMpv_anime4kModeAtom)
     const clientId = useAtomValue(clientIdAtom)
     const setActive = useSetAtom(__clientMpv_activeAtom)
     const setSession = useSetAtom(__clientMpv_sessionAtom)
@@ -283,6 +285,10 @@ export function useLaunchClientMpv() {
         setActive(true)
         setState(null)
 
+        // Anime4K wiring (undefined when not installed / outside Denshi —
+        // never blocks the launch)
+        const anime4k = await getClientMpvAnime4kLaunch(anime4kMode)
+
         const result = await window.electron!.mpv!.launch({
             url,
             title: args.fileTitle,
@@ -292,6 +298,7 @@ export function useLaunchClientMpv() {
             mpvPath: override || undefined,
             playlist,
             playlistStartIndex,
+            anime4k,
         })
 
         if (!result.ok) {
@@ -304,7 +311,7 @@ export function useLaunchClientMpv() {
 
         toast.success("Playing in mpv")
         return result
-    }, [serverStatus, detection.found, override, extraArgs, clientId, getHMACTokenQueryParam, setActive, setSession, setState])
+    }, [serverStatus, detection.found, override, extraArgs, anime4kMode, clientId, getHMACTokenQueryParam, setActive, setSession, setState])
 }
 
 // Completion threshold for auto-syncing AniList progress when mpv exits.

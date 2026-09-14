@@ -11,6 +11,7 @@ const { autoUpdater } = require("electron-updater")
 const log = require("electron-log/main")
 log.initialize()
 const mpvClient = require("./mpv-client")
+const anime4k = require("./anime4k")
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Settings
@@ -1599,6 +1600,7 @@ app.whenReady().then(async () => {
                 mpvPathOverride: opts.mpvPath,
                 playlist: opts.playlist,
                 playlistStartIndex: opts.playlistStartIndex,
+                anime4k: opts.anime4k,
                 onState: (state) => sendMpvEvent("mpv:state", state),
                 onExited: (info) => sendMpvEvent("mpv:exited", info),
                 onPlaylistChanged: (info) => sendMpvEvent("mpv:playlist-changed", info),
@@ -1620,6 +1622,43 @@ app.whenReady().then(async () => {
     ipcMain.handle("client-mpv:kill", async () => {
         const killed = mpvClient.killActive()
         return { ok: true, killed }
+    })
+
+    // Anime4K shader management for client-side mpv (see anime4k.js).
+    ipcMain.handle("anime4k:status", async () => {
+        try {
+            return { ok: true, ...anime4k.getStatus() }
+        } catch (err) {
+            return { ok: false, error: err.message }
+        }
+    })
+
+    ipcMain.handle("anime4k:install", async () => {
+        try {
+            const status = await anime4k.install()
+            return { ok: true, ...status }
+        } catch (err) {
+            log.error(`[anime4k:install] ${err.message}`)
+            return { ok: false, error: err.message }
+        }
+    })
+
+    ipcMain.handle("anime4k:uninstall", async () => {
+        try {
+            const status = anime4k.uninstall()
+            return { ok: true, ...status }
+        } catch (err) {
+            log.error(`[anime4k:uninstall] ${err.message}`)
+            return { ok: false, error: err.message }
+        }
+    })
+
+    ipcMain.handle("anime4k:resolve", async (_, mode) => {
+        try {
+            return { ok: true, ...anime4k.resolve(mode) }
+        } catch (err) {
+            return { ok: false, error: err.message }
+        }
     })
 
     ipcMain.handle("client-mpv:command", async (_, command) => {
