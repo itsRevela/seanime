@@ -127,7 +127,27 @@
 
 <div class="pagebreak"></div>
 
-<h2><span class="step">4</span>Online streaming with Anikoto</h2>
+<h2><span class="step">4</span>qBittorrent — downloading to your library</h2>
+<p>Seanime talks to qBittorrent through its <b>Web UI API</b>, so it's two steps: turn that on in qBittorrent, then point Seanime at it.</p>
+<p><b>In qBittorrent</b> (install from <b>qbittorrent.org</b> if you haven't):</p>
+<ol>
+    <li><b>Tools → Options → Web UI</b> → check <b>“Web User Interface (Remote control)”</b>.</li>
+    <li>Leave the port at <b>8080</b> (note it down if you change it — the two sides must match).</li>
+    <li>Either set a username + password, <b>or</b> check <b>“Bypass authentication for clients on localhost”</b> (simplest, since both apps run on this PC).</li>
+    <li>Click OK and leave qBittorrent running.</li>
+</ol>
+<p><b>In Seanime</b> — <b>Settings → Torrents / Torrent Client</b>:</p>
+<ol>
+    <li><b>Default Torrent Client:</b> qBittorrent. (Leave the torrent search <b>Default Provider</b> as it is — AnimeTosho works out of the box.)</li>
+    <li><b>Host:</b> <code>127.0.0.1</code> &nbsp;·&nbsp; <b>Port:</b> <code>8080</code></li>
+    <li><b>Username / Password:</b> whatever you set in the Web UI — leave both empty if you used the localhost bypass.</li>
+    <li><b>Executable:</b> (optional but recommended) full path to <code>qbittorrent.exe</code>, usually <code>C:\Program Files\qBittorrent\qbittorrent.exe</code> — lets Seanime auto-launch qBittorrent when it's not running.</li>
+    <li><b>Tags / Category:</b> optional — e.g. category <code>seanime</code> to group Seanime's downloads inside qBittorrent.</li>
+    <li>Save. Make sure your <b>library folder</b> is set (Settings → Library) — finished downloads land there and get matched into your library automatically.</li>
+</ol>
+<p><b>Test it:</b> open any anime → download an episode via the torrent search. Seanime hands the torrent to qBittorrent, shows progress in its torrent list, and the episode appears in your library when done.</p>
+
+<h2><span class="step">5</span>Online streaming with Anikoto</h2>
 <ol>
     <li><b>Settings → Online Streaming</b> → turn on <b>Enable</b> (“Watch anime episodes from online sources”).</li>
     <li>Open the <b>Extensions</b> page → <b>Marketplace</b> → paste this into the <b>Marketplace URL</b> field:<br>
@@ -139,7 +159,7 @@
     <b>About dubs:</b> “Switch to dub” depends entirely on the source site. If a dub errors out or plays Japanese audio, the site's dub for that episode is missing or lagging behind — try another provider from the marketplace, or check the Extensions page for provider updates. Not a Seanime problem.
 </div>
 
-<h2><span class="step">5</span>If something breaks</h2>
+<h2><span class="step">6</span>If something breaks</h2>
 <table>
     <tr><th>Symptom</th><th>Fix</th></tr>
     <tr>
@@ -153,6 +173,10 @@
     <tr>
         <td>“ffprobe: executable file not found in %PATH%”</td>
         <td>ffmpeg isn't visible to the server — fully quit &amp; relaunch Denshi after installing, or set the explicit FFmpeg/FFprobe paths in Settings → Media Streaming.</td>
+    </tr>
+    <tr>
+        <td>Seanime can't connect to qBittorrent</td>
+        <td>qBittorrent must be running with the Web UI enabled; the port in Seanime must match Tools → Options → Web UI (default 8080). If you set Web UI credentials, mirror them in Seanime.</td>
     </tr>
     <tr>
         <td>“Failed to load subtitle track” on online streaming</td>
