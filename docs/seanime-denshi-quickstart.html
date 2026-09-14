@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Seanime Denshi — Quickstart</title>
+<style>
+    @page { size: Letter; margin: 14mm 15mm; }
+    * { box-sizing: border-box; }
+    body {
+        font-family: "Segoe UI", Arial, sans-serif;
+        color: #1a1d24;
+        font-size: 10.5pt;
+        line-height: 1.45;
+        margin: 0;
+    }
+    header {
+        border-bottom: 3px solid #6152df;
+        padding-bottom: 8px;
+        margin-bottom: 14px;
+    }
+    h1 { font-size: 20pt; margin: 0 0 2px; color: #2b2160; }
+    .subtitle { color: #555; font-size: 10pt; }
+    h2 {
+        font-size: 13pt;
+        color: #4335a8;
+        margin: 16px 0 6px;
+        padding-bottom: 2px;
+        border-bottom: 1px solid #d8d4f2;
+    }
+    h2 .step {
+        display: inline-block;
+        background: #6152df;
+        color: #fff;
+        border-radius: 4px;
+        font-size: 10pt;
+        padding: 1px 7px;
+        margin-right: 7px;
+        vertical-align: 2px;
+    }
+    ol, ul { margin: 4px 0 8px; padding-left: 20px; }
+    li { margin-bottom: 3px; }
+    code, .path {
+        font-family: Consolas, "Courier New", monospace;
+        background: #f1effc;
+        border: 1px solid #e0dcf5;
+        border-radius: 3px;
+        padding: 0 4px;
+        font-size: 9.5pt;
+        word-break: break-all;
+    }
+    .callout {
+        border-left: 4px solid #e0a52f;
+        background: #fdf6e5;
+        padding: 6px 10px;
+        margin: 8px 0;
+        border-radius: 0 4px 4px 0;
+    }
+    .callout.blue { border-left-color: #4a7fd6; background: #ecf3fd; }
+    .callout b:first-child { color: #7a5a10; }
+    .callout.blue b:first-child { color: #234f9c; }
+    table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 9.5pt;
+        margin: 6px 0;
+    }
+    th, td { border: 1px solid #d5d2e8; padding: 5px 8px; text-align: left; vertical-align: top; }
+    th { background: #efedfa; color: #2b2160; }
+    footer {
+        margin-top: 18px;
+        padding-top: 6px;
+        border-top: 1px solid #ccc;
+        color: #777;
+        font-size: 8.5pt;
+    }
+    .pagebreak { break-before: page; }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>Seanime Denshi — Quickstart</h1>
+    <div class="subtitle">First-time setup on Windows &nbsp;·&nbsp; mpv playback + ffmpeg/LAN streaming + online streaming (Anikoto) &nbsp;·&nbsp; for v3.8.30 and later</div>
+</header>
+
+<h2><span class="step">1</span>Download &amp; install</h2>
+<ol>
+    <li>Go to <b>github.com/itsRevela/seanime/releases/latest</b> and download <code>seanime-denshi-3.8.30_Windows_x64.exe</code> (the version number may be higher later — always grab the latest).</li>
+    <li>Run it. The installer is unsigned, so Windows SmartScreen will complain: click <b>More info → Run anyway</b>, then accept the admin (UAC) prompt.</li>
+    <li>Launch <b>Seanime Denshi</b>. It starts its own local Seanime server automatically. Sign in with your AniList account when asked, and set your anime <b>library folder</b> under <b>Settings → Library</b> if you want local files/downloads.</li>
+</ol>
+<div class="callout">
+    <b>Upgrading later:</b> just run the newer installer <u>over</u> the existing install. <b>Never uninstall first</b> — uninstalling deletes the app's data. This build intentionally has <b>no auto-updates</b>; new versions always come from the same releases page.
+</div>
+
+<h2><span class="step">2</span>mpv — full playback functionality</h2>
+<ol>
+    <li>Install mpv: open a terminal and run <code>winget install mpv</code> (or download a build from <b>mpv.io</b>). No admin needed.</li>
+    <li>Launch mpv once by itself (double-click <code>mpv.exe</code> or drop a video on it), then close it. This warms up Windows' first-run checks.</li>
+    <li>In Seanime: <b>Settings → Playback</b> → under <i>Video playback</i>, turn on <b>“Use local mpv on this device”</b>.</li>
+    <li>If mpv isn't on your PATH, fill in <b>“mpv path override”</b> with the full path to <code>mpv.exe</code> (e.g. <code>C:\Program Files\MPV Player\mpv.exe</code>). Start with <b>“Extra mpv args”</b> empty — a single bad flag there makes mpv exit instantly.</li>
+</ol>
+<p>You get: playback in real mpv with episode playlists (<code>&lt;</code>/<code>&gt;</code> for prev/next), resume-from-last-position, automatic AniList progress sync when you finish an episode, and screenshots saved to <span class="path">Pictures\seanime</span>.</p>
+<div class="callout blue">
+    <b>Optional — buffering/tuning flags:</b> once everything works, you can put this proven set into <b>“Extra mpv args”</b>:<br>
+    <code>--cache=yes --cache-secs=300 --demuxer-readahead-secs=60 --demuxer-max-bytes=2GiB --network-timeout=60</code><br>
+    It buffers up to 5 minutes / 2&nbsp;GiB ahead and tolerates slow reads — mainly useful when mpv streams over a network (remote server, slow NAS). On an all-local setup like this one it's optional; add it if you ever see stutter on high-bitrate files. If mpv stops launching after editing this field, clear it first — a typo here is the #1 cause.
+</div>
+
+<h2><span class="step">3</span>ffmpeg — transcoding &amp; LAN streaming</h2>
+<p>Needed for playing in a web browser (direct play/transcoding) and for streaming to other devices on your network.</p>
+<ol>
+    <li>Run <code>winget install Gyan.FFmpeg</code> in a regular terminal (installs both <code>ffmpeg</code> and <code>ffprobe</code>).</li>
+    <li><b>Fully quit Denshi and relaunch it</b> — quit from the tray icon if it minimizes to tray. The server only sees the new PATH after a restart. (Alternative: skip PATH entirely and set <b>FFmpeg path</b> / <b>FFprobe path</b> explicitly under <b>Settings → Media Streaming</b>, e.g. <code>C:\ffmpeg\bin\ffmpeg.exe</code>.)</li>
+    <li>Tune <b>Settings → Media Streaming</b>: pick a <b>Transcode preset</b>, and enable hardware acceleration if you have an NVIDIA/Intel GPU. CPU works fine to start.</li>
+</ol>
+<p><b>To watch from other devices on your LAN</b> (phone, TV, another PC):</p>
+<ol>
+    <li>Open <span class="path">%APPDATA%\Seanime\config.toml</span> (paste that into the Explorer address bar) and under <code>[server]</code> set:<br>
+        <code>host = '0.0.0.0'</code> &nbsp;and add&nbsp; <code>password = 'pick-something'</code> (strongly recommended once it's reachable beyond this PC).</li>
+    <li>Restart Denshi. If Windows Firewall asks, allow access (or add an inbound rule for TCP port <b>43211</b>).</li>
+    <li>On the other device, browse to <code>http://&lt;this-PC's-IP&gt;:43211</code> and log in with the password.</li>
+</ol>
+<div class="callout blue">
+    <b>Note:</b> the server lives inside Denshi — it runs only while the Denshi app is open. Keep Denshi running (tray is fine) while others are streaming.
+</div>
+
+<div class="pagebreak"></div>
+
+<h2><span class="step">4</span>Online streaming with Anikoto</h2>
+<ol>
+    <li><b>Settings → Online Streaming</b> → turn on <b>Enable</b> (“Watch anime episodes from online sources”).</li>
+    <li>Open the <b>Extensions</b> page → <b>Marketplace</b> → paste this into the <b>Marketplace URL</b> field:<br>
+        <code>https://raw.githubusercontent.com/Bas1874/Seanime-Marketplace/refs/heads/main/Marketplace/Main.json</code></li>
+    <li>Find <b>“Anikoto”</b> by <b>aquaryuo</b> (id <code>aq-anikoto</code> — pick this one if more than one Anikoto is listed) and click <b>Install</b>.</li>
+    <li>Open any anime → <b>Stream online</b> → choose <b>Anikoto</b> as the provider. Episodes play in the built-in player (this is the path that needs ffmpeg-free HLS only — no extra setup).</li>
+</ol>
+<div class="callout">
+    <b>About dubs:</b> “Switch to dub” depends entirely on the source site. If a dub errors out or plays Japanese audio, the site's dub for that episode is missing or lagging behind — try another provider from the marketplace, or check the Extensions page for provider updates. Not a Seanime problem.
+</div>
+
+<h2><span class="step">5</span>If something breaks</h2>
+<table>
+    <tr><th>Symptom</th><th>Fix</th></tr>
+    <tr>
+        <td>SmartScreen blocks the installer</td>
+        <td>More info → Run anyway (expected — the build is unsigned).</td>
+    </tr>
+    <tr>
+        <td>mpv error: “IPC socket…” or “mpv exited (code N)”</td>
+        <td>Check the mpv path override points at a real <code>mpv.exe</code> (not mpv.net), clear “Extra mpv args”, launch mpv once manually, retry.</td>
+    </tr>
+    <tr>
+        <td>“ffprobe: executable file not found in %PATH%”</td>
+        <td>ffmpeg isn't visible to the server — fully quit &amp; relaunch Denshi after installing, or set the explicit FFmpeg/FFprobe paths in Settings → Media Streaming.</td>
+    </tr>
+    <tr>
+        <td>“Failed to load subtitle track” on online streaming</td>
+        <td>Fixed in v3.8.30 — make sure you're on 3.8.30 or newer.</td>
+    </tr>
+    <tr>
+        <td>An update popup appears</td>
+        <td>It shouldn't (updates are disabled in this build, v3.8.29+). If you see one on an older version, ignore it — <b>never</b> install updates from inside the app; they would replace this build with the upstream one.</td>
+    </tr>
+    <tr>
+        <td>Anything else</td>
+        <td>Logs: <span class="path">%APPDATA%\seanime-denshi\logs\main.log</span> (app) and <span class="path">%APPDATA%\Seanime\logs\</span> (server). Send the latest one over.</td>
+    </tr>
+</table>
+
+<footer>
+    Seanime Denshi Quickstart · itsRevela fork · written for v3.8.30 · 2026-09-13 · downloads: github.com/itsRevela/seanime/releases/latest
+</footer>
+
+</body>
+</html>
