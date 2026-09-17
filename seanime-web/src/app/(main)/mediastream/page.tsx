@@ -175,7 +175,20 @@ function MediastreamPage() {
                     return
                 }
 
-                if (codecSupported && (!mediastreamSettings?.disableAutoSwitchToDirectPlay || mediastreamSettings?.directPlayOnly)) {
+                // Direct play hands the browser the raw file, and without the native
+                // audioTracks API (absent in Chromium/Firefox) a multi-audio file
+                // would be stuck on its default track. Keep transcoding for those —
+                // the "Original" ladder entry transmuxes, so quality is preserved —
+                // unless the user explicitly forces direct play.
+                const multiAudio = (mediaContainer.mediaInfo?.audios?.length ?? 0) > 1
+                const canSwitchNativeAudio = "audioTracks" in document.createElement("video")
+                const keepTranscodeForAudioSelection = multiAudio && !canSwitchNativeAudio && !mediastreamSettings?.directPlayOnly
+
+                if (keepTranscodeForAudioSelection) {
+                    log.info("Keeping transcode: file has multiple audio tracks and this browser can't switch native audio tracks")
+                }
+
+                if (codecSupported && !keepTranscodeForAudioSelection && (!mediastreamSettings?.disableAutoSwitchToDirectPlay || mediastreamSettings?.directPlayOnly)) {
                     log.info("Switching to direct play")
                     setStreamType("direct")
                     changeUrl(null)

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.8.32
+
+- 🐛 Mediastream: Audio track switching now works for multi-audio files in the browser
+  - Two stacked failures made dual-audio local files effectively single-audio when watched through a web browser (LAN playback via the built-in player). First, the player's audio menu displayed the HLS tracks that the cassette transcoder correctly advertises (`EXT-X-MEDIA` per stream) but routed every selection through the native `videoElement.audioTracks` manager — an API Chromium and Firefox don't implement — so clicking a track did nothing. Selections on HLS streams now go through hls.js (`vc_hlsSetAudioTrack`), which flushes and refills its own buffer, no seek nudge needed.
+  - Second, the page's auto-switch preferred **direct play** whenever the codec was browser-compatible, and direct play hands the browser the raw file — with no native audioTracks API there is no way to change tracks at all (and the menu never rendered). Multi-audio files now stay on transcoding in browsers that can't switch native audio; the "Original" ladder entry transmuxes, so no quality is lost. `Direct play only` still forces direct play for users who explicitly choose that trade-off, and single-audio files auto-switch exactly as before.
+
 ## v3.8.31
 
 - ✨ Denshi + VideoCore: Anime4K upscaling for client-side mpv, installable in one click

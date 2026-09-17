@@ -7,7 +7,7 @@ import { vc_miniPlayer } from "@/app/(main)/_features/video-core/video-core-atom
 import { vc_videoElement } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { vc_containerElement } from "@/app/(main)/_features/video-core/video-core-atoms"
 import { VideoCoreControlButtonIcon } from "@/app/(main)/_features/video-core/video-core-control-bar"
-import { HlsAudioTrack, vc_hlsAudioTracks, vc_hlsCurrentAudioTrack } from "@/app/(main)/_features/video-core/video-core-hls"
+import { HlsAudioTrack, vc_hlsAudioTracks, vc_hlsCurrentAudioTrack, vc_hlsSetAudioTrack } from "@/app/(main)/_features/video-core/video-core-hls"
 import { VideoCoreMenu, VideoCoreMenuBody, VideoCoreMenuTitle, VideoCoreSettingSelect } from "@/app/(main)/_features/video-core/video-core-menu"
 import { vc_dispatchAction } from "@/app/(main)/_features/video-core/video-core.utils"
 import { useAtomValue } from "jotai"
@@ -31,6 +31,7 @@ export function VideoCoreAudioMenu() {
     // Get HLS audio tracks
     const hlsAudioTracks = useAtomValue(vc_hlsAudioTracks)
     const hlsCurrentAudioTrack = useAtomValue(vc_hlsCurrentAudioTrack)
+    const hlsSetAudioTrack = useAtomValue(vc_hlsSetAudioTrack)
 
     // Determine which audio tracks to use
     const audioTracks = mkvAudioTracks || (hlsAudioTracks.length > 0 ? hlsAudioTracks : null)
@@ -101,6 +102,15 @@ export function VideoCoreAudioMenu() {
                         }
                     })}
                     onValueChange={(value: number) => {
+                        if (isHls) {
+                            // HLS audio switching goes through hls.js, which flushes and
+                            // refills the buffer itself — no seek nudge needed. The native
+                            // audioTracks manager below is a no-op for HLS streams
+                            // (Chromium/Firefox don't implement the audioTracks API).
+                            hlsSetAudioTrack?.(value)
+                            setSelectedTrack(value)
+                            return
+                        }
                         audioManager?.selectTrack(value)
                         action({ type: "seek", payload: { time: -1 } })
                     }}
